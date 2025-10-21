@@ -45,7 +45,7 @@ const Reports = () => {
       let pixPayments = 0;
 
       orders.forEach((order) => {
-        order.payments?.forEach((payment: any) => {
+        order.payments?.forEach((payment: { amount: number; payment_method: string }) => {
           const amount = Number(payment.amount);
           if (payment.payment_method === "cash") cashPayments += amount;
           else if (payment.payment_method === "pix") pixPayments += amount;

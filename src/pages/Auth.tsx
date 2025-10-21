@@ -55,10 +55,10 @@ const Auth = () => {
         description: "Bem-vindo ao FETUCCINE",
       });
       navigate("/dashboard");
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Erro ao fazer login",
-        description: error.message || "Verifique suas credenciais e tente novamente",
+        description: error instanceof Error ? error.message : "Verifique suas credenciais e tente novamente",
         variant: "destructive",
       });
     } finally {
@@ -90,10 +90,10 @@ const Auth = () => {
         title: "Conta criada com sucesso!",
         description: "Você já pode fazer login no sistema",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Erro ao criar conta",
-        description: error.message || "Tente novamente mais tarde",
+        description: error instanceof Error ? error.message : "Tente novamente mais tarde",
         variant: "destructive",
       });
     } finally {

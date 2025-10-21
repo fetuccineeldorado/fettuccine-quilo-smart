@@ -7,7 +7,10 @@ import {
   TrendingUp, 
   Scale,
   FileText,
-  Clock
+  Clock,
+  Package,
+  UserPlus,
+  BarChart3
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 
@@ -133,7 +136,7 @@ const Dashboard = () => {
               Ações Rápidas
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <a
               href="/dashboard/weighing"
               className="p-6 rounded-lg border-2 border-border hover:border-primary bg-card hover:bg-accent transition-smooth text-center"
@@ -156,9 +159,47 @@ const Dashboard = () => {
               href="/dashboard/reports"
               className="p-6 rounded-lg border-2 border-border hover:border-secondary bg-card hover:bg-accent transition-smooth text-center"
             >
-              <Users className="h-8 w-8 mx-auto mb-3 text-secondary" />
+              <BarChart3 className="h-8 w-8 mx-auto mb-3 text-secondary" />
               <h3 className="font-semibold mb-1">Relatórios</h3>
               <p className="text-sm text-muted-foreground">Ver relatórios</p>
+            </a>
+          </CardContent>
+        </Card>
+
+        {/* Management Sections */}
+        <Card className="shadow-soft">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Gestão
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <a
+              href="/dashboard/inventory"
+              className="p-6 rounded-lg border-2 border-border hover:border-primary bg-card hover:bg-accent transition-smooth text-center"
+            >
+              <Package className="h-8 w-8 mx-auto mb-3 text-primary" />
+              <h3 className="font-semibold mb-1">Estoque</h3>
+              <p className="text-sm text-muted-foreground">Gerenciar inventário</p>
+            </a>
+            
+            <a
+              href="/dashboard/customers"
+              className="p-6 rounded-lg border-2 border-border hover:border-success bg-card hover:bg-accent transition-smooth text-center"
+            >
+              <Users className="h-8 w-8 mx-auto mb-3 text-success" />
+              <h3 className="font-semibold mb-1">Clientes</h3>
+              <p className="text-sm text-muted-foreground">Gerenciar clientes</p>
+            </a>
+            
+            <a
+              href="/dashboard/employees"
+              className="p-6 rounded-lg border-2 border-border hover:border-secondary bg-card hover:bg-accent transition-smooth text-center"
+            >
+              <UserPlus className="h-8 w-8 mx-auto mb-3 text-secondary" />
+              <h3 className="font-semibold mb-1">Funcionários</h3>
+              <p className="text-sm text-muted-foreground">Gerenciar equipe</p>
             </a>
           </CardContent>
         </Card>

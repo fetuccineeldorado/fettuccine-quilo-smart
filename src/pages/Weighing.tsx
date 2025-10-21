@@ -99,10 +99,10 @@ const Weighing = () => {
       setTimeout(() => {
         navigate("/dashboard/orders");
       }, 1500);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Erro ao criar comanda",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Erro desconhecido",
         variant: "destructive",
       });
     } finally {

@@ -75,7 +75,7 @@ const Cashier = () => {
       // Create payment record
       await supabase.from("payments").insert([{
         order_id: selectedOrder.id,
-        payment_method: paymentMethod as any,
+        payment_method: paymentMethod as "cash" | "card" | "pix",
         amount: Number(selectedOrder.total_amount),
         change_amount: paymentMethod === "cash" ? calculateChange() : 0,
         processed_by: session?.user?.id,
@@ -101,10 +101,10 @@ const Cashier = () => {
       setPaymentMethod("");
       setAmountReceived("");
       fetchOpenOrders();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Erro ao processar pagamento",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Erro desconhecido",
         variant: "destructive",
       });
     } finally {

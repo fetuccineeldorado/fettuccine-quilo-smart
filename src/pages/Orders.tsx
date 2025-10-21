@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,25 @@ const Orders = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchOrders = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("orders")
+      .select("*")
+      .order("opened_at", { ascending: false });
+
+    if (error) {
+      toast({
+        title: "Erro ao carregar comandas",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      setOrders(data || []);
+    }
+    setLoading(false);
+  }, [toast]);
+
   useEffect(() => {
     fetchOrders();
     
@@ -47,26 +66,7 @@ const Orders = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
-
-  const fetchOrders = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("orders")
-      .select("*")
-      .order("opened_at", { ascending: false });
-
-    if (error) {
-      toast({
-        title: "Erro ao carregar comandas",
-        description: error.message,
-        variant: "destructive",
-      });
-    } else {
-      setOrders(data || []);
-    }
-    setLoading(false);
-  };
+  }, [fetchOrders]);
 
   const handleCancelOrder = async (orderId: string) => {
     const { error } = await supabase
@@ -90,7 +90,7 @@ const Orders = () => {
   };
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, { variant: any; label: string }> = {
+    const variants: Record<string, { variant: "default" | "outline" | "destructive"; label: string }> = {
       open: { variant: "default", label: "Aberta" },
       closed: { variant: "outline", label: "Fechada" },
       cancelled: { variant: "destructive", label: "Cancelada" },

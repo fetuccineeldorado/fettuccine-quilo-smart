@@ -9,6 +9,9 @@ import {
   CreditCard, 
   BarChart3, 
   Settings,
+  Package,
+  Users,
+  UserPlus,
   LogOut,
   Menu,
   X
@@ -62,6 +65,9 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     { path: "/dashboard/orders", icon: FileText, label: "Comandas" },
     { path: "/dashboard/cashier", icon: CreditCard, label: "Caixa" },
     { path: "/dashboard/reports", icon: BarChart3, label: "Relatórios" },
+    { path: "/dashboard/inventory", icon: Package, label: "Estoque" },
+    { path: "/dashboard/customers", icon: Users, label: "Clientes" },
+    { path: "/dashboard/employees", icon: UserPlus, label: "Funcionários" },
     { path: "/dashboard/settings", icon: Settings, label: "Configurações" },
   ];
 
