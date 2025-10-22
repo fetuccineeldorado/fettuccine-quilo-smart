@@ -75,7 +75,7 @@ const Cashier = () => {
       // Create payment record
       await supabase.from("payments").insert([{
         order_id: selectedOrder.id,
-        payment_method: paymentMethod as "cash" | "card" | "pix",
+        payment_method: paymentMethod as "cash" | "credit" | "debit" | "pix",
         amount: Number(selectedOrder.total_amount),
         change_amount: paymentMethod === "cash" ? calculateChange() : 0,
         processed_by: session?.user?.id,
