@@ -16,14 +16,10 @@ interface Employee {
   id: string;
   name: string;
   email: string;
-  phone: string;
-  role: string;
-  salary: number;
-  hire_date: string;
-  status: string;
-  total_orders_processed: number;
-  total_revenue_generated: number;
-  last_login: string;
+  role: 'admin' | 'manager' | 'cashier' | 'kitchen';
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 const Employees = () => {
@@ -35,9 +31,7 @@ const Employees = () => {
   const [newEmployee, setNewEmployee] = useState({
     name: "",
     email: "",
-    phone: "",
-    role: "operator",
-    salary: 0,
+    role: "cashier" as 'admin' | 'manager' | 'cashier' | 'kitchen',
   });
 
   useEffect(() => {
@@ -77,11 +71,7 @@ const Employees = () => {
       .from("employees")
       .insert([{
         ...newEmployee,
-        hire_date: new Date().toISOString(),
-        status: "active",
-        total_orders_processed: 0,
-        total_revenue_generated: 0,
-        last_login: new Date().toISOString(),
+        is_active: true,
       }]);
 
     if (error) {
@@ -98,9 +88,7 @@ const Employees = () => {
       setNewEmployee({
         name: "",
         email: "",
-        phone: "",
-        role: "operator",
-        salary: 0,
+        role: "cashier",
       });
       setShowAddForm(false);
       fetchEmployees();
@@ -113,24 +101,19 @@ const Employees = () => {
         return { label: "Administrador", color: "bg-red-100 text-red-800", icon: Shield };
       case "manager":
         return { label: "Gerente", color: "bg-blue-100 text-blue-800", icon: User };
-      case "operator":
-        return { label: "Operador", color: "bg-green-100 text-green-800", icon: Clock };
+      case "cashier":
+        return { label: "Caixa", color: "bg-green-100 text-green-800", icon: Clock };
+      case "kitchen":
+        return { label: "Cozinha", color: "bg-orange-100 text-orange-800", icon: User };
       default:
         return { label: "Funcionário", color: "bg-gray-100 text-gray-800", icon: User };
     }
   };
 
-  const getStatusInfo = (status: string) => {
-    switch (status) {
-      case "active":
-        return { label: "Ativo", color: "default" };
-      case "inactive":
-        return { label: "Inativo", color: "secondary" };
-      case "on_leave":
-        return { label: "Afastado", color: "outline" };
-      default:
-        return { label: "Desconhecido", color: "secondary" };
-    }
+  const getStatusInfo = (isActive: boolean) => {
+    return isActive 
+      ? { label: "Ativo", color: "default" }
+      : { label: "Inativo", color: "secondary" };
   };
 
   const filteredEmployees = employees.filter(employee =>
@@ -140,8 +123,7 @@ const Employees = () => {
   );
 
   const topPerformers = employees
-    .filter(emp => emp.status === "active")
-    .sort((a, b) => b.total_revenue_generated - a.total_revenue_generated)
+    .filter(emp => emp.is_active)
     .slice(0, 5);
 
   return (
@@ -205,37 +187,18 @@ const Employees = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Telefone</Label>
-                  <Input
-                    id="phone"
-                    value={newEmployee.phone}
-                    onChange={(e) => setNewEmployee({ ...newEmployee, phone: e.target.value })}
-                    placeholder="(11) 99999-9999"
-                  />
-                </div>
-                <div className="space-y-2">
                   <Label htmlFor="role">Cargo</Label>
-                  <Select value={newEmployee.role} onValueChange={(value) => setNewEmployee({ ...newEmployee, role: value })}>
+                  <Select value={newEmployee.role} onValueChange={(value) => setNewEmployee({ ...newEmployee, role: value as 'admin' | 'manager' | 'cashier' | 'kitchen' })}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="operator">Operador</SelectItem>
+                      <SelectItem value="cashier">Caixa</SelectItem>
+                      <SelectItem value="kitchen">Cozinha</SelectItem>
                       <SelectItem value="manager">Gerente</SelectItem>
                       <SelectItem value="admin">Administrador</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="salary">Salário (R$)</Label>
-                  <Input
-                    id="salary"
-                    type="number"
-                    step="0.01"
-                    value={newEmployee.salary}
-                    onChange={(e) => setNewEmployee({ ...newEmployee, salary: Number(e.target.value) })}
-                    placeholder="0.00"
-                  />
                 </div>
               </div>
               <div className="flex gap-2">
@@ -278,7 +241,7 @@ const Employees = () => {
                       <Badge className={roleInfo.color}>
                         {roleInfo.label}
                       </Badge>
-                      <p className="text-sm font-semibold">R$ {employee.total_revenue_generated.toFixed(2)}</p>
+                      <p className="text-sm font-semibold">{employee.role}</p>
                     </div>
                   </div>
                 );
@@ -291,7 +254,7 @@ const Employees = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredEmployees.map((employee) => {
             const roleInfo = getRoleInfo(employee.role);
-            const statusInfo = getStatusInfo(employee.status);
+            const statusInfo = getStatusInfo(employee.is_active);
             const Icon = roleInfo.icon;
             return (
               <Card key={employee.id} className="shadow-soft hover:shadow-lg transition-smooth">
@@ -314,31 +277,13 @@ const Employees = () => {
                     <Icon className="h-4 w-4 text-primary" />
                     <span>{employee.role}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <DollarSign className="h-4 w-4 text-success" />
-                    <span>R$ {employee.total_revenue_generated.toFixed(2)} gerados</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <Clock className="h-4 w-4 text-primary" />
-                    <span>{employee.total_orders_processed} pedidos processados</span>
-                  </div>
-                  {employee.phone && (
-                    <div className="text-sm text-muted-foreground">
-                      📞 {employee.phone}
-                    </div>
-                  )}
                   <div className="pt-2 border-t space-y-1">
                     <div className="text-xs text-muted-foreground">
-                      Admitido: {format(new Date(employee.hire_date), "dd/MM/yyyy", { locale: ptBR })}
+                      Cadastrado: {format(new Date(employee.created_at), "dd/MM/yyyy", { locale: ptBR })}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      Último login: {format(new Date(employee.last_login), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                      Status: {employee.is_active ? "Ativo" : "Inativo"}
                     </div>
-                    {employee.salary > 0 && (
-                      <div className="text-xs text-muted-foreground">
-                        Salário: R$ {employee.salary.toFixed(2)}
-                      </div>
-                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -374,3 +319,4 @@ const Employees = () => {
 };
 
 export default Employees;
+

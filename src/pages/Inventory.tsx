@@ -12,12 +12,13 @@ import { Package, Plus, AlertTriangle, CheckCircle } from "lucide-react";
 interface InventoryItem {
   id: string;
   name: string;
-  category: string;
-  current_stock: number;
-  min_stock: number;
+  quantity: number;
   unit: string;
   cost_per_unit: number;
-  last_updated: string;
+  min_stock: number;
+  status: 'active' | 'inactive' | 'low_stock';
+  created_at: string;
+  updated_at: string;
 }
 
 const Inventory = () => {
@@ -27,10 +28,9 @@ const Inventory = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newItem, setNewItem] = useState({
     name: "",
-    category: "",
-    current_stock: 0,
+    quantity: 0,
     min_stock: 0,
-    unit: "unidade",
+    unit: "kg",
     cost_per_unit: 0,
   });
 
@@ -58,10 +58,10 @@ const Inventory = () => {
   };
 
   const handleAddItem = async () => {
-    if (!newItem.name || !newItem.category) {
+    if (!newItem.name) {
       toast({
-        title: "Campos obrigatórios",
-        description: "Nome e categoria são obrigatórios",
+        title: "Campo obrigatório",
+        description: "Nome é obrigatório",
         variant: "destructive",
       });
       return;
@@ -69,7 +69,14 @@ const Inventory = () => {
 
     const { error } = await supabase
       .from("inventory")
-      .insert([newItem]);
+      .insert([{
+        name: newItem.name,
+        quantity: newItem.quantity,
+        unit: newItem.unit,
+        cost_per_unit: newItem.cost_per_unit,
+        min_stock: newItem.min_stock,
+        status: newItem.quantity <= newItem.min_stock ? 'low_stock' : 'active'
+      }]);
 
     if (error) {
       toast({
@@ -84,10 +91,9 @@ const Inventory = () => {
       });
       setNewItem({
         name: "",
-        category: "",
-        current_stock: 0,
+        quantity: 0,
         min_stock: 0,
-        unit: "unidade",
+        unit: "kg",
         cost_per_unit: 0,
       });
       setShowAddForm(false);
@@ -101,8 +107,8 @@ const Inventory = () => {
     return { status: "ok", color: "default", label: "Em estoque" };
   };
 
-  const lowStockItems = items.filter(item => item.current_stock <= item.min_stock);
-  const outOfStockItems = items.filter(item => item.current_stock <= 0);
+  const lowStockItems = items.filter(item => item.quantity <= item.min_stock);
+  const outOfStockItems = items.filter(item => item.quantity <= 0);
 
   return (
     <DashboardLayout>
@@ -165,21 +171,13 @@ const Inventory = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="category">Categoria</Label>
+                  <Label htmlFor="quantity">Quantidade Atual</Label>
                   <Input
-                    id="category"
-                    value={newItem.category}
-                    onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
-                    placeholder="Ex: Grãos, Carnes, Vegetais..."
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="current_stock">Estoque Atual</Label>
-                  <Input
-                    id="current_stock"
+                    id="quantity"
                     type="number"
-                    value={newItem.current_stock}
-                    onChange={(e) => setNewItem({ ...newItem, current_stock: Number(e.target.value) })}
+                    step="0.01"
+                    value={newItem.quantity}
+                    onChange={(e) => setNewItem({ ...newItem, quantity: Number(e.target.value) })}
                   />
                 </div>
                 <div className="space-y-2">
@@ -237,12 +235,12 @@ const Inventory = () => {
                       {stockStatus.label}
                     </Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground">{item.category}</p>
+                  <p className="text-sm text-muted-foreground">Status: {item.status}</p>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Estoque Atual:</span>
-                    <span className="font-semibold">{item.current_stock} {item.unit}</span>
+                    <span className="text-sm text-muted-foreground">Quantidade Atual:</span>
+                    <span className="font-semibold">{item.quantity} {item.unit}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-muted-foreground">Mínimo:</span>
@@ -255,7 +253,7 @@ const Inventory = () => {
                   <div className="pt-2 border-t">
                     <div className="flex justify-between text-xs text-muted-foreground mb-1">
                       <span>Estoque</span>
-                      <span>{item.current_stock}/{item.min_stock}</span>
+                      <span>{item.quantity}/{item.min_stock}</span>
                     </div>
                     <div className="w-full bg-muted rounded-full h-2">
                       <div 
@@ -264,7 +262,7 @@ const Inventory = () => {
                           stockStatus.status === "low" ? "bg-warning" : "bg-success"
                         }`}
                         style={{ 
-                          width: `${Math.min(100, (item.current_stock / Math.max(item.min_stock, 1)) * 100)}%` 
+                          width: `${Math.min(100, (item.quantity / Math.max(item.min_stock, 1)) * 100)}%` 
                         }}
                       />
                     </div>

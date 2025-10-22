@@ -16,11 +16,11 @@ interface Customer {
   name: string;
   email: string;
   phone: string;
+  tier: 'bronze' | 'silver' | 'gold' | 'platinum';
   total_orders: number;
   total_spent: number;
-  last_visit: string;
   created_at: string;
-  notes: string;
+  updated_at: string;
 }
 
 const Customers = () => {
@@ -33,7 +33,6 @@ const Customers = () => {
     name: "",
     email: "",
     phone: "",
-    notes: "",
   });
 
   useEffect(() => {
@@ -73,9 +72,9 @@ const Customers = () => {
       .from("customers")
       .insert([{
         ...newCustomer,
+        tier: 'bronze',
         total_orders: 0,
         total_spent: 0,
-        last_visit: new Date().toISOString(),
       }]);
 
     if (error) {
@@ -93,18 +92,20 @@ const Customers = () => {
         name: "",
         email: "",
         phone: "",
-        notes: "",
       });
       setShowAddForm(false);
       fetchCustomers();
     }
   };
 
-  const getCustomerTier = (totalSpent: number) => {
-    if (totalSpent >= 1000) return { tier: "VIP", color: "bg-purple-100 text-purple-800" };
-    if (totalSpent >= 500) return { tier: "Gold", color: "bg-yellow-100 text-yellow-800" };
-    if (totalSpent >= 200) return { tier: "Silver", color: "bg-gray-100 text-gray-800" };
-    return { tier: "Bronze", color: "bg-orange-100 text-orange-800" };
+  const getCustomerTier = (tier: string) => {
+    const tierMap = {
+      'bronze': { tier: "Bronze", color: "bg-orange-100 text-orange-800" },
+      'silver': { tier: "Silver", color: "bg-gray-100 text-gray-800" },
+      'gold': { tier: "Gold", color: "bg-yellow-100 text-yellow-800" },
+      'platinum': { tier: "Platinum", color: "bg-purple-100 text-purple-800" },
+    };
+    return tierMap[tier as keyof typeof tierMap] || tierMap.bronze;
   };
 
   const filteredCustomers = customers.filter(customer =>
@@ -185,15 +186,6 @@ const Customers = () => {
                     placeholder="(11) 99999-9999"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Observações</Label>
-                  <Input
-                    id="notes"
-                    value={newCustomer.notes}
-                    onChange={(e) => setNewCustomer({ ...newCustomer, notes: e.target.value })}
-                    placeholder="Observações sobre o cliente"
-                  />
-                </div>
               </div>
               <div className="flex gap-2">
                 <Button onClick={handleAddCustomer}>
@@ -219,7 +211,7 @@ const Customers = () => {
           <CardContent>
             <div className="space-y-3">
               {topCustomers.map((customer, index) => {
-                const tier = getCustomerTier(customer.total_spent);
+                const tier = getCustomerTier(customer.tier);
                 return (
                   <div key={customer.id} className="flex items-center justify-between p-3 bg-accent/30 rounded-lg">
                     <div className="flex items-center gap-3">
@@ -247,7 +239,7 @@ const Customers = () => {
         {/* Customers List */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredCustomers.map((customer) => {
-            const tier = getCustomerTier(customer.total_spent);
+            const tier = getCustomerTier(customer.tier);
             return (
               <Card key={customer.id} className="shadow-soft hover:shadow-lg transition-smooth">
                 <CardHeader className="pb-3">
@@ -273,13 +265,8 @@ const Customers = () => {
                       📞 {customer.phone}
                     </div>
                   )}
-                  {customer.notes && (
-                    <div className="text-sm text-muted-foreground italic">
-                      "{customer.notes}"
-                    </div>
-                  )}
                   <div className="pt-2 border-t text-xs text-muted-foreground">
-                    Última visita: {format(new Date(customer.last_visit), "dd/MM/yyyy", { locale: ptBR })}
+                    Cadastrado em: {format(new Date(customer.created_at), "dd/MM/yyyy", { locale: ptBR })}
                   </div>
                 </CardContent>
               </Card>
