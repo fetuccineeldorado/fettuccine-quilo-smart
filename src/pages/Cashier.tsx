@@ -30,6 +30,38 @@ const Cashier = () => {
   }, []);
 
   const fetchOpenOrders = async () => {
+    // Verificar se a chave do Supabase está configurada
+    const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    if (!supabaseKey || supabaseKey === 'your_supabase_anon_key_here') {
+      // Usar dados mock quando a chave não estiver configurada
+      const mockOrders = [
+        {
+          id: '1',
+          order_number: 1001,
+          customer_name: 'João Silva',
+          status: 'open',
+          total_amount: 25.50,
+          total_weight: 0.5,
+          opened_at: new Date().toISOString(),
+          closed_at: null,
+          table_number: 1
+        },
+        {
+          id: '2',
+          order_number: 1002,
+          customer_name: 'Maria Santos',
+          status: 'open',
+          total_amount: 45.00,
+          total_weight: 0.8,
+          opened_at: new Date(Date.now() - 1800000).toISOString(),
+          closed_at: null,
+          table_number: 2
+        }
+      ];
+      setOrders(mockOrders);
+      return;
+    }
+
     const { data } = await supabase
       .from("orders")
       .select("*")

@@ -25,6 +25,20 @@ const Dashboard = () => {
   });
 
   const fetchStats = useCallback(async () => {
+    // Verificar se a chave do Supabase está configurada
+    const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    if (!supabaseKey || supabaseKey === 'your_supabase_anon_key_here') {
+      // Usar dados mock quando a chave não estiver configurada
+      setStats({
+        todayOrders: 12,
+        todayRevenue: 450.75,
+        openOrders: 3,
+        avgTicket: 37.56,
+        totalWeight: 8.5,
+      });
+      return;
+    }
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
