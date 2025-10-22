@@ -22,16 +22,35 @@ const Settings = () => {
   }, []);
 
   const fetchSettings = async () => {
-    const { data } = await supabase
-      .from("system_settings")
-      .select("*")
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from("system_settings")
+        .select("*")
+        .single();
 
-    if (data) {
-      setSettings({
-        pricePerKg: Number(data.price_per_kg).toFixed(2),
-        minimumCharge: Number(data.minimum_charge).toFixed(2),
-        maximumWeight: Number(data.maximum_weight).toFixed(2),
+      if (error) {
+        console.error('Erro ao carregar configurações:', error);
+        toast({
+          title: "Erro ao carregar configurações",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (data) {
+        setSettings({
+          pricePerKg: Number(data.price_per_kg).toFixed(2),
+          minimumCharge: Number(data.minimum_charge).toFixed(2),
+          maximumWeight: Number(data.maximum_weight).toFixed(2),
+        });
+      }
+    } catch (err) {
+      console.error('Erro geral ao carregar configurações:', err);
+      toast({
+        title: "Erro ao carregar configurações",
+        description: "Erro desconhecido",
+        variant: "destructive",
       });
     }
   };
@@ -41,6 +60,17 @@ const Settings = () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
+      // Primeiro, obter o ID da configuração atual
+      const { data: currentSettings, error: fetchError } = await supabase
+        .from("system_settings")
+        .select("id")
+        .single();
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      // Atualizar as configurações
       const { error } = await supabase
         .from("system_settings")
         .update({
@@ -49,7 +79,7 @@ const Settings = () => {
           maximum_weight: Number(settings.maximumWeight),
           updated_by: session?.user?.id,
         })
-        .eq("id", (await supabase.from("system_settings").select("id").single()).data?.id);
+        .eq("id", currentSettings.id);
 
       if (error) throw error;
 
@@ -57,7 +87,11 @@ const Settings = () => {
         title: "Configurações salvas!",
         description: "As alterações foram aplicadas com sucesso",
       });
+
+      // Recarregar as configurações para confirmar
+      await fetchSettings();
     } catch (error: unknown) {
+      console.error('Erro ao salvar configurações:', error);
       toast({
         title: "Erro ao salvar configurações",
         description: error instanceof Error ? error.message : "Erro desconhecido",

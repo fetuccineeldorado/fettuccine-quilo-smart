@@ -31,15 +31,34 @@ const Weighing = () => {
   const [customerName, setCustomerName] = useState<string>("");
 
   const fetchSettings = useCallback(async () => {
-    const { data } = await supabase
-      .from("system_settings")
-      .select("price_per_kg")
-      .single();
-    
-    if (data) {
-      setPricePerKg(Number(data.price_per_kg));
+    try {
+      const { data, error } = await supabase
+        .from("system_settings")
+        .select("price_per_kg")
+        .single();
+      
+      if (error) {
+        console.error('Erro ao carregar preço por kg:', error);
+        toast({
+          title: "Erro ao carregar configurações",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (data) {
+        setPricePerKg(Number(data.price_per_kg));
+      }
+    } catch (err) {
+      console.error('Erro geral ao carregar configurações:', err);
+      toast({
+        title: "Erro ao carregar configurações",
+        description: "Erro desconhecido",
+        variant: "destructive",
+      });
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     fetchSettings();

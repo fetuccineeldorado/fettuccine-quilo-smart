@@ -25,48 +25,48 @@ const Dashboard = () => {
   });
 
   const fetchStats = useCallback(async () => {
-    // Verificar se a chave do Supabase está configurada
-    const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-    if (!supabaseKey || supabaseKey === 'your_supabase_anon_key_here') {
-      // Usar dados mock quando a chave não estiver configurada
-      setStats({
-        todayOrders: 12,
-        todayRevenue: 450.75,
-        openOrders: 3,
-        avgTicket: 37.56,
-        totalWeight: 8.5,
-      });
-      return;
-    }
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+      // Fetch today's orders
+      const { data: orders, error: ordersError } = await supabase
+        .from("orders")
+        .select("*")
+        .gte("opened_at", today.toISOString());
 
-    // Fetch today's orders
-    const { data: orders } = await supabase
-      .from("orders")
-      .select("*")
-      .gte("opened_at", today.toISOString());
+      if (ordersError) {
+        console.error('Erro ao carregar pedidos do dia:', ordersError);
+        return;
+      }
 
-    // Fetch open orders
-    const { data: openOrders } = await supabase
-      .from("orders")
-      .select("*")
-      .eq("status", "open");
+      // Fetch open orders
+      const { data: openOrders, error: openOrdersError } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("status", "open");
 
-    if (orders) {
-      const closedOrders = orders.filter(o => o.status === "closed");
-      const totalRevenue = closedOrders.reduce((sum, o) => sum + Number(o.total_amount), 0);
-      const totalWeight = closedOrders.reduce((sum, o) => sum + Number(o.total_weight), 0);
-      const avgTicket = closedOrders.length > 0 ? totalRevenue / closedOrders.length : 0;
+      if (openOrdersError) {
+        console.error('Erro ao carregar pedidos abertos:', openOrdersError);
+        return;
+      }
 
-      setStats({
-        todayOrders: closedOrders.length,
-        todayRevenue: totalRevenue,
-        openOrders: openOrders?.length || 0,
-        avgTicket: avgTicket,
-        totalWeight: totalWeight,
-      });
+      if (orders) {
+        const closedOrders = orders.filter(o => o.status === "closed");
+        const totalRevenue = closedOrders.reduce((sum, o) => sum + Number(o.total_amount), 0);
+        const totalWeight = closedOrders.reduce((sum, o) => sum + Number(o.total_weight), 0);
+        const avgTicket = closedOrders.length > 0 ? totalRevenue / closedOrders.length : 0;
+
+        setStats({
+          todayOrders: closedOrders.length,
+          todayRevenue: totalRevenue,
+          openOrders: openOrders?.length || 0,
+          avgTicket: avgTicket,
+          totalWeight: totalWeight,
+        });
+      }
+    } catch (err) {
+      console.error('Erro geral ao carregar estatísticas:', err);
     }
   }, []);
 
