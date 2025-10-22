@@ -5,11 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/DashboardLayout";
 import ExtraItemsSelector from "@/components/ExtraItemsSelector";
-import { Scale, CheckCircle, AlertCircle, ShoppingCart, Utensils } from "lucide-react";
+import { AlertCircle, ShoppingCart, Utensils } from "lucide-react";
 
 interface SelectedExtraItem {
   id: string;
@@ -25,7 +24,6 @@ const Weighing = () => {
   const [weight, setWeight] = useState<string>("");
   const [pricePerKg, setPricePerKg] = useState<number>(54.90);
   const [loading, setLoading] = useState(false);
-  const [simulatedWeight, setSimulatedWeight] = useState<number>(0);
   const [extraItems, setExtraItems] = useState<SelectedExtraItem[]>([]);
   const [extraItemsTotal, setExtraItemsTotal] = useState<number>(0);
   const [customerName, setCustomerName] = useState<string>("");
@@ -64,12 +62,6 @@ const Weighing = () => {
     fetchSettings();
   }, [fetchSettings]);
 
-  const simulateWeighing = () => {
-    // Simulate a random weight between 0.2kg and 1.5kg
-    const randomWeight = (Math.random() * 1.3 + 0.2).toFixed(3);
-    setSimulatedWeight(Number(randomWeight));
-    setWeight(randomWeight);
-  };
 
   const calculateTotal = () => {
     const weightNum = Number(weight);
@@ -162,7 +154,6 @@ const Weighing = () => {
       // Reset form
       setCustomerName("");
       setWeight("");
-      setSimulatedWeight(0);
       setExtraItems([]);
       setExtraItemsTotal(0);
       
@@ -187,64 +178,25 @@ const Weighing = () => {
         <div>
           <h1 className="text-4xl font-bold mb-2">Pesagem</h1>
           <p className="text-muted-foreground text-lg">
-            Sistema de pesagem automática por quilo com itens extras
+            Sistema de pesagem manual por quilo com itens extras
           </p>
         </div>
 
-        <Tabs defaultValue="weighing" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="weighing" className="flex items-center gap-2">
-              <Scale className="h-4 w-4" />
-              Pesagem
-            </TabsTrigger>
-            <TabsTrigger value="extras" className="flex items-center gap-2">
-              <ShoppingCart className="h-4 w-4" />
-              Itens Extras
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="weighing" className="space-y-6">
-            <div className="grid lg:grid-cols-2 gap-6">
-          {/* Weighing Card */}
+        <div className="grid lg:grid-cols-2 gap-6">
+          {/* Manual Weighing Card */}
           <Card className="shadow-strong">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Scale className="h-6 w-6 text-primary" />
-                Balança Digital
+                <Utensils className="h-6 w-6 text-primary" />
+                Pesagem Manual
               </CardTitle>
               <CardDescription>
-                Coloque o prato na balança ou simule uma pesagem
+                Insira o peso da comida manualmente
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="text-center py-12 bg-accent/30 rounded-lg border-2 border-dashed border-border">
-                {simulatedWeight > 0 ? (
-                  <div className="space-y-2">
-                    <CheckCircle className="h-16 w-16 mx-auto text-success" />
-                    <p className="text-6xl font-bold text-success">
-                      {simulatedWeight} kg
-                    </p>
-                    <p className="text-muted-foreground">Peso detectado</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <Scale className="h-16 w-16 mx-auto text-muted-foreground" />
-                    <p className="text-muted-foreground">Aguardando pesagem...</p>
-                  </div>
-                )}
-              </div>
-
-              <Button
-                onClick={simulateWeighing}
-                variant="outline"
-                className="w-full"
-                size="lg"
-              >
-                Simular Pesagem Automática
-              </Button>
-
               <div className="space-y-2">
-                <Label htmlFor="manual-weight">Ou insira o peso manualmente</Label>
+                <Label htmlFor="manual-weight">Peso (kg) *</Label>
                 <Input
                   id="manual-weight"
                   type="number"
@@ -252,10 +204,7 @@ const Weighing = () => {
                   min="0"
                   placeholder="0.000"
                   value={weight}
-                  onChange={(e) => {
-                    setWeight(e.target.value);
-                    setSimulatedWeight(0);
-                  }}
+                  onChange={(e) => setWeight(e.target.value)}
                 />
               </div>
 
@@ -340,13 +289,23 @@ const Weighing = () => {
               </Button>
             </CardContent>
           </Card>
-            </div>
-          </TabsContent>
+        </div>
 
-          <TabsContent value="extras" className="space-y-6">
+        {/* Extra Items Section */}
+        <Card className="shadow-strong">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShoppingCart className="h-6 w-6 text-primary" />
+              Itens Extras
+            </CardTitle>
+            <CardDescription>
+              Adicione bebidas, sobremesas e outros itens à comanda
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             <ExtraItemsSelector onItemsChange={handleExtraItemsChange} />
-          </TabsContent>
-        </Tabs>
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   );
