@@ -2,5 +2,5 @@
 UPDATE system_settings 
 SET price_per_kg = 54.90, 
     updated_at = NOW()
-WHERE id IN (SELECT id FROM system_settings LIMIT 1);
+WHERE EXISTS (SELECT 1 FROM system_settings LIMIT 1);
 

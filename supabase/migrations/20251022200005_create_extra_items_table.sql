@@ -27,18 +27,22 @@ CREATE INDEX IF NOT EXISTS idx_extra_items_active ON extra_items(is_active);
 CREATE INDEX IF NOT EXISTS idx_order_extra_items_order_id ON order_extra_items(order_id);
 
 -- Create trigger for updated_at
+DROP TRIGGER IF EXISTS update_extra_items_updated_at ON extra_items;
 CREATE TRIGGER update_extra_items_updated_at BEFORE UPDATE ON extra_items FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Insert some default extra items
-INSERT INTO extra_items (name, description, price, category) VALUES
-('Refrigerante 350ml', 'Coca-Cola, Pepsi, Fanta, etc.', 4.50, 'drink'),
-('Refrigerante 600ml', 'Coca-Cola, Pepsi, Fanta, etc.', 6.50, 'drink'),
-('Água 500ml', 'Água mineral', 2.50, 'drink'),
-('Suco Natural 300ml', 'Suco de laranja, uva, etc.', 5.00, 'drink'),
-('Café', 'Café expresso', 3.00, 'drink'),
-('Cerveja 350ml', 'Cerveja gelada', 8.00, 'drink'),
-('Salada', 'Salada verde', 7.00, 'food'),
-('Batata Frita', 'Porção de batata frita', 8.50, 'food'),
-('Pudim', 'Pudim de leite', 6.00, 'dessert'),
-('Sorvete', 'Sorvete de creme', 4.50, 'dessert');
+-- Insert some default extra items (only if table is empty)
+INSERT INTO extra_items (name, description, price, category)
+SELECT * FROM (VALUES
+  ('Refrigerante 350ml', 'Coca-Cola, Pepsi, Fanta, etc.', 4.50, 'drink'),
+  ('Refrigerante 600ml', 'Coca-Cola, Pepsi, Fanta, etc.', 6.50, 'drink'),
+  ('Água 500ml', 'Água mineral', 2.50, 'drink'),
+  ('Suco Natural 300ml', 'Suco de laranja, uva, etc.', 5.00, 'drink'),
+  ('Café', 'Café expresso', 3.00, 'drink'),
+  ('Cerveja 350ml', 'Cerveja gelada', 8.00, 'drink'),
+  ('Salada', 'Salada verde', 7.00, 'food'),
+  ('Batata Frita', 'Porção de batata frita', 8.50, 'food'),
+  ('Pudim', 'Pudim de leite', 6.00, 'dessert'),
+  ('Sorvete', 'Sorvete de creme', 4.50, 'dessert')
+) AS items(name, description, price, category)
+WHERE NOT EXISTS (SELECT 1 FROM extra_items LIMIT 1);
 
