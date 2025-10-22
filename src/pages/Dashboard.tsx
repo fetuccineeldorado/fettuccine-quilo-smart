@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ThemeDemo } from "@/components/theme-demo";
 import { 
   DollarSign, 
   Users, 
@@ -203,6 +204,9 @@ const Dashboard = () => {
             </a>
           </CardContent>
         </Card>
+
+        {/* Theme Demo */}
+        <ThemeDemo />
       </div>
     </DashboardLayout>
   );

@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { useNavigate, NavLink, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { 
   LayoutDashboard, 
   Scale, 
@@ -90,23 +91,29 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
               <h1 className="text-2xl font-bold gradient-primary bg-clip-text text-transparent">
                 FETUCCINE
               </h1>
+              <div className="flex items-center gap-2">
+                <ThemeToggle />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center gap-2">
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setSidebarOpen(false)}
+                onClick={() => setSidebarOpen(true)}
+                className="mx-auto"
               >
-                <X className="h-5 w-5" />
+                <Menu className="h-5 w-5" />
               </Button>
-            </>
-          ) : (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setSidebarOpen(true)}
-              className="mx-auto"
-            >
-              <Menu className="h-5 w-5" />
-            </Button>
+              <ThemeToggle />
+            </div>
           )}
         </div>
 
