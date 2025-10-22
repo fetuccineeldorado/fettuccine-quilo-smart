@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      extra_items: {
+        Row: {
+          id: string
+          name: string
+          description: string
+          price: number
+          category: string
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description: string
+          price: number
+          category: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string
+          price?: number
+          category?: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       cash_register: {
         Row: {
           amount: number
@@ -106,6 +139,7 @@ export type Database = {
         Row: {
           closed_at: string | null
           closed_by: string | null
+          customer_name: string | null
           extras_total: number
           food_total: number
           id: string
@@ -121,6 +155,7 @@ export type Database = {
         Insert: {
           closed_at?: string | null
           closed_by?: string | null
+          customer_name?: string | null
           extras_total?: number
           food_total?: number
           id?: string
@@ -136,6 +171,7 @@ export type Database = {
         Update: {
           closed_at?: string | null
           closed_by?: string | null
+          customer_name?: string | null
           extras_total?: number
           food_total?: number
           id?: string

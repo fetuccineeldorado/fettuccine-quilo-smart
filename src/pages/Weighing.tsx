@@ -28,6 +28,7 @@ const Weighing = () => {
   const [simulatedWeight, setSimulatedWeight] = useState<number>(0);
   const [extraItems, setExtraItems] = useState<SelectedExtraItem[]>([]);
   const [extraItemsTotal, setExtraItemsTotal] = useState<number>(0);
+  const [customerName, setCustomerName] = useState<string>("");
 
   const fetchSettings = useCallback(async () => {
     const { data } = await supabase
@@ -68,6 +69,15 @@ const Weighing = () => {
   };
 
   const handleCreateOrder = async () => {
+    if (!customerName.trim()) {
+      toast({
+        title: "Nome do cliente obrigatório",
+        description: "Por favor, insira o nome do cliente",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!weight || Number(weight) <= 0) {
       toast({
         title: "Peso inválido",
@@ -90,6 +100,7 @@ const Weighing = () => {
         .from("orders")
         .insert({
           status: "open",
+          customer_name: customerName.trim(),
           total_weight: weightNum,
           food_total: foodTotal,
           total_amount: total,
@@ -126,10 +137,11 @@ const Weighing = () => {
 
       toast({
         title: "Comanda criada!",
-        description: `Comanda #${order.order_number} - R$ ${total.toFixed(2)}`,
+        description: `Comanda #${order.order_number} - ${customerName} - R$ ${total.toFixed(2)}`,
       });
 
       // Reset form
+      setCustomerName("");
       setWeight("");
       setSimulatedWeight(0);
       setExtraItems([]);
@@ -227,6 +239,18 @@ const Weighing = () => {
                   }}
                 />
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="customer-name">Nome do Cliente *</Label>
+                <Input
+                  id="customer-name"
+                  type="text"
+                  placeholder="Digite o nome do cliente"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  required
+                />
+              </div>
             </CardContent>
           </Card>
 
@@ -289,7 +313,7 @@ const Weighing = () => {
 
               <Button
                 onClick={handleCreateOrder}
-                disabled={!weight || Number(weight) <= 0 || loading}
+                disabled={!weight || Number(weight) <= 0 || !customerName.trim() || loading}
                 size="lg"
                 className="w-full"
               >

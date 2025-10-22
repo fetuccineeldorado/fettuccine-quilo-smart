@@ -15,7 +15,8 @@ import {
   UserPlus,
   LogOut,
   Menu,
-  X
+  X,
+  ShoppingCart
 } from "lucide-react";
 import { Session } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
@@ -69,6 +70,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     { path: "/dashboard/inventory", icon: Package, label: "Estoque" },
     { path: "/dashboard/customers", icon: Users, label: "Clientes" },
     { path: "/dashboard/employees", icon: UserPlus, label: "Funcionários" },
+    { path: "/dashboard/extra-items", icon: ShoppingCart, label: "Itens Extras" },
     { path: "/dashboard/settings", icon: Settings, label: "Configurações" },
   ];
 
