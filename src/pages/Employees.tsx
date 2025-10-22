@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,11 +34,7 @@ const Employees = () => {
     role: "cashier" as 'admin' | 'manager' | 'cashier' | 'kitchen',
   });
 
-  useEffect(() => {
-    fetchEmployees();
-  }, []);
-
-  const fetchEmployees = async () => {
+  const fetchEmployees = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("employees")
@@ -55,7 +51,11 @@ const Employees = () => {
       setEmployees(data || []);
     }
     setLoading(false);
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    fetchEmployees();
+  }, [fetchEmployees]);
 
   const handleAddEmployee = async () => {
     if (!newEmployee.name || !newEmployee.email) {

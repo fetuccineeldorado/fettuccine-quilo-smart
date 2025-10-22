@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,11 +35,7 @@ const Customers = () => {
     phone: "",
   });
 
-  useEffect(() => {
-    fetchCustomers();
-  }, []);
-
-  const fetchCustomers = async () => {
+  const fetchCustomers = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("customers")
@@ -56,7 +52,11 @@ const Customers = () => {
       setCustomers(data || []);
     }
     setLoading(false);
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    fetchCustomers();
+  }, [fetchCustomers]);
 
   const handleAddCustomer = async () => {
     if (!newCustomer.name) {

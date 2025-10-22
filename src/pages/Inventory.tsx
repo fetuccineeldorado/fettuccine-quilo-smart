@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,11 +34,7 @@ const Inventory = () => {
     cost_per_unit: 0,
   });
 
-  useEffect(() => {
-    fetchInventory();
-  }, []);
-
-  const fetchInventory = async () => {
+  const fetchInventory = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("inventory")
@@ -55,7 +51,11 @@ const Inventory = () => {
       setItems(data || []);
     }
     setLoading(false);
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    fetchInventory();
+  }, [fetchInventory]);
 
   const handleAddItem = async () => {
     if (!newItem.name) {

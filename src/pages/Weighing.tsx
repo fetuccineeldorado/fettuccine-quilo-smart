@@ -1,27 +1,35 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Scale, CheckCircle, AlertCircle } from "lucide-react";
+import ExtraItemsSelector from "@/components/ExtraItemsSelector";
+import { Scale, CheckCircle, AlertCircle, ShoppingCart, Utensils } from "lucide-react";
+
+interface SelectedExtraItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  total: number;
+}
 
 const Weighing = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [weight, setWeight] = useState<string>("");
-  const [pricePerKg, setPricePerKg] = useState<number>(45);
+  const [pricePerKg, setPricePerKg] = useState<number>(54.90);
   const [loading, setLoading] = useState(false);
   const [simulatedWeight, setSimulatedWeight] = useState<number>(0);
+  const [extraItems, setExtraItems] = useState<SelectedExtraItem[]>([]);
+  const [extraItemsTotal, setExtraItemsTotal] = useState<number>(0);
 
-  useEffect(() => {
-    fetchSettings();
-  }, []);
-
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async () => {
     const { data } = await supabase
       .from("system_settings")
       .select("price_per_kg")
@@ -30,7 +38,11 @@ const Weighing = () => {
     if (data) {
       setPricePerKg(Number(data.price_per_kg));
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchSettings();
+  }, [fetchSettings]);
 
   const simulateWeighing = () => {
     // Simulate a random weight between 0.2kg and 1.5kg
@@ -41,7 +53,18 @@ const Weighing = () => {
 
   const calculateTotal = () => {
     const weightNum = Number(weight);
+    const foodTotal = weightNum * pricePerKg;
+    return (foodTotal + extraItemsTotal).toFixed(2);
+  };
+
+  const calculateFoodTotal = () => {
+    const weightNum = Number(weight);
     return (weightNum * pricePerKg).toFixed(2);
+  };
+
+  const handleExtraItemsChange = (items: SelectedExtraItem[], total: number) => {
+    setExtraItems(items);
+    setExtraItemsTotal(total);
   };
 
   const handleCreateOrder = async () => {
@@ -59,7 +82,8 @@ const Weighing = () => {
       const { data: { session } } = await supabase.auth.getSession();
       
       const weightNum = Number(weight);
-      const total = weightNum * pricePerKg;
+      const foodTotal = weightNum * pricePerKg;
+      const total = foodTotal + extraItemsTotal;
 
       // Create new order
       const { data: order, error } = await supabase
@@ -67,7 +91,7 @@ const Weighing = () => {
         .insert({
           status: "open",
           total_weight: weightNum,
-          food_total: total,
+          food_total: foodTotal,
           total_amount: total,
           opened_by: session?.user?.id,
         })
@@ -76,15 +100,29 @@ const Weighing = () => {
 
       if (error) throw error;
 
-      // Create order item
+      // Create order item for food
       await supabase.from("order_items").insert({
         order_id: order.id,
         item_type: "food_weight",
         description: `Comida por quilo - ${weightNum}kg`,
         quantity: weightNum,
         unit_price: pricePerKg,
-        total_price: total,
+        total_price: foodTotal,
       });
+
+      // Create order items for extra items
+      if (extraItems.length > 0) {
+        const extraItemsData = extraItems.map(item => ({
+          order_id: order.id,
+          item_type: "extra_item",
+          description: item.name,
+          quantity: item.quantity,
+          unit_price: item.price,
+          total_price: item.total,
+        }));
+
+        await supabase.from("order_items").insert(extraItemsData);
+      }
 
       toast({
         title: "Comanda criada!",
@@ -94,6 +132,8 @@ const Weighing = () => {
       // Reset form
       setWeight("");
       setSimulatedWeight(0);
+      setExtraItems([]);
+      setExtraItemsTotal(0);
       
       // Navigate to orders or stay for next weighing
       setTimeout(() => {
@@ -112,15 +152,28 @@ const Weighing = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-8 max-w-4xl mx-auto space-y-8">
+      <div className="p-8 max-w-6xl mx-auto space-y-8">
         <div>
           <h1 className="text-4xl font-bold mb-2">Pesagem</h1>
           <p className="text-muted-foreground text-lg">
-            Sistema de pesagem automática por quilo
+            Sistema de pesagem automática por quilo com itens extras
           </p>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-6">
+        <Tabs defaultValue="weighing" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="weighing" className="flex items-center gap-2">
+              <Scale className="h-4 w-4" />
+              Pesagem
+            </TabsTrigger>
+            <TabsTrigger value="extras" className="flex items-center gap-2">
+              <ShoppingCart className="h-4 w-4" />
+              Itens Extras
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="weighing" className="space-y-6">
+            <div className="grid lg:grid-cols-2 gap-6">
           {/* Weighing Card */}
           <Card className="shadow-strong">
             <CardHeader>
@@ -199,6 +252,22 @@ const Weighing = () => {
                   </span>
                 </div>
 
+                <div className="flex justify-between items-center p-4 bg-muted rounded-lg">
+                  <span className="text-muted-foreground">Comida</span>
+                  <span className="text-xl font-semibold">
+                    R$ {calculateFoodTotal()}
+                  </span>
+                </div>
+
+                {extraItemsTotal > 0 && (
+                  <div className="flex justify-between items-center p-4 bg-muted rounded-lg">
+                    <span className="text-muted-foreground">Itens Extras</span>
+                    <span className="text-xl font-semibold">
+                      R$ {extraItemsTotal.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
                 <div className="flex justify-between items-center p-6 bg-gradient-success rounded-lg">
                   <span className="text-success-foreground font-medium text-lg">
                     Total
@@ -228,7 +297,13 @@ const Weighing = () => {
               </Button>
             </CardContent>
           </Card>
-        </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="extras" className="space-y-6">
+            <ExtraItemsSelector onItemsChange={handleExtraItemsChange} />
+          </TabsContent>
+        </Tabs>
       </div>
     </DashboardLayout>
   );

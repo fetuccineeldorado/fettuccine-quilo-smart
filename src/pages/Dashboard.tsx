@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeDemo } from "@/components/theme-demo";
@@ -24,11 +24,7 @@ const Dashboard = () => {
     totalWeight: 0,
   });
 
-  useEffect(() => {
-    fetchStats();
-  }, []);
-
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -58,7 +54,11 @@ const Dashboard = () => {
         totalWeight: totalWeight,
       });
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
 
   const statCards = [
     {
