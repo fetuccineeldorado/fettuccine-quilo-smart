@@ -26,8 +26,10 @@ const Orders = () => {
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const fetchOrders = useCallback(async () => {
+    console.log('🔄 fetchOrders: Iniciando carregamento de comandas...');
     setLoading(true);
     
     try {
@@ -37,7 +39,7 @@ const Orders = () => {
         .order("opened_at", { ascending: false });
 
       if (error) {
-        console.error('Erro ao carregar comandas:', error);
+        console.error('❌ Erro ao carregar comandas:', error);
         toast({
           title: "Erro ao carregar comandas",
           description: error.message,
@@ -45,10 +47,12 @@ const Orders = () => {
         });
         setOrders([]);
       } else {
+        console.log('✅ fetchOrders: Comandas carregadas:', data?.length || 0);
+        console.log('📋 fetchOrders: IDs das comandas:', data?.map(o => o.id) || []);
         setOrders(data || []);
       }
     } catch (err) {
-      console.error('Erro geral ao carregar comandas:', err);
+      console.error('💥 Erro geral ao carregar comandas:', err);
       toast({
         title: "Erro ao carregar comandas",
         description: "Erro desconhecido",
@@ -57,10 +61,11 @@ const Orders = () => {
       setOrders([]);
     } finally {
       setLoading(false);
+      console.log('✅ fetchOrders: Carregamento finalizado');
     }
   }, [toast]);
 
-  const handleDeleteOrder = async (orderId: string, orderNumber: number, status: string) => {
+  const handleDeleteOrder = useCallback(async (orderId: string, orderNumber: number, status: string) => {
     console.log('🗑️ Iniciando exclusão da comanda:', { orderId, orderNumber, status });
     
     // Diferentes mensagens de confirmação baseadas no status
@@ -127,26 +132,107 @@ const Orders = () => {
 
       // Finalmente, deletar a comanda
       console.log('🔄 Passo 4: Deletando comanda principal...');
-      const { error: orderError } = await supabase
+      console.log('🔍 ID da comanda a ser deletada:', orderId);
+      
+      // Primeiro, verificar se a comanda existe
+      const { data: existingOrder, error: checkError } = await supabase
+        .from("orders")
+        .select("id, order_number, status")
+        .eq("id", orderId)
+        .single();
+
+      if (checkError) {
+        console.error('❌ Erro ao verificar comanda:', checkError);
+        throw checkError;
+      }
+      
+      console.log('🔍 Comanda encontrada:', existingOrder);
+      
+      // Tentar deletar a comanda
+      const { error: orderError, count } = await supabase
         .from("orders")
         .delete()
         .eq("id", orderId);
 
       if (orderError) {
         console.error('❌ Erro ao deletar comanda:', orderError);
+        console.error('❌ Detalhes do erro:', {
+          code: orderError.code,
+          message: orderError.message,
+          details: orderError.details,
+          hint: orderError.hint
+        });
         throw orderError;
       }
-      console.log('✅ Comanda principal deletada com sucesso');
+      
+      console.log('✅ Comanda principal deletada com sucesso. Registros afetados:', count);
+      
+      if (count === 0) {
+        console.log('⚠️ ATENÇÃO: Nenhum registro foi afetado! Isso pode indicar:');
+        console.log('⚠️ 1. RLS (Row Level Security) bloqueando a exclusão');
+        console.log('⚠️ 2. Permissões insuficientes');
+        console.log('⚠️ 3. Chaves estrangeiras impedindo a exclusão');
+        throw new Error('Nenhum registro foi afetado pela exclusão');
+      }
 
       console.log('🎉 Exclusão concluída com sucesso!');
+      
+      // Remover comanda do estado local imediatamente
+      console.log('🔄 Removendo comanda do estado local...');
+      console.log('📊 Estado atual antes da remoção:', orders.length, 'comandas');
+      console.log('🎯 ID da comanda a ser removida:', orderId);
+      
+      // Forçar remoção imediata usando uma abordagem mais direta
+      const updatedOrders = orders.filter(order => {
+        const shouldKeep = order.id !== orderId;
+        console.log(`🔍 Comanda ${order.order_number} (${order.id}): ${shouldKeep ? 'MANTER' : 'REMOVER'}`);
+        return shouldKeep;
+      });
+      
+      console.log('📋 Comandas após filtro:', updatedOrders.map(o => ({ id: o.id, number: o.order_number })));
+      console.log('✅ Comanda removida do estado local. Total restante:', updatedOrders.length);
+      
+      // Atualizar o estado diretamente
+      setOrders(updatedOrders);
+      
+      // Verificar se o estado foi atualizado
+      console.log('🔄 Verificando se o estado foi atualizado...');
+      setTimeout(() => {
+        console.log('📊 Estado após atualização:', orders.length, 'comandas');
+        console.log('📋 IDs atuais:', orders.map(o => ({ id: o.id, number: o.order_number })));
+      }, 100);
+      
       toast({
         title: "Comanda excluída!",
         description: `Comanda #${orderNumber} foi excluída com sucesso.`,
       });
 
-      // Recarregar a lista de comandas
-      console.log('🔄 Recarregando lista de comandas...');
-      fetchOrders();
+      // Forçar re-renderização
+      console.log('🔄 Forçando re-renderização...');
+      setRefreshKey(prev => prev + 1);
+
+      // Aguardar um pouco para garantir que o estado foi atualizado
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Verificar se a comanda foi realmente excluída do banco
+      console.log('🔍 Verificando se a comanda foi excluída do banco...');
+      const { data: checkData, error: verifyError } = await supabase
+        .from("orders")
+        .select("id")
+        .eq("id", orderId)
+        .single();
+
+      if (verifyError && verifyError.code === 'PGRST116') {
+        console.log('✅ Comanda confirmada como excluída do banco');
+      } else if (checkData) {
+        console.log('❌ ERRO: Comanda ainda existe no banco!', checkData);
+        throw new Error('Comanda não foi excluída do banco de dados');
+      }
+
+      // Recarregar a lista de comandas para garantir sincronização
+      console.log('🔄 Recarregando lista de comandas para sincronização...');
+      await fetchOrders();
+      console.log('✅ Lista de comandas recarregada');
     } catch (error: unknown) {
       console.error('💥 Erro geral ao excluir comanda:', error);
       toast({
@@ -155,7 +241,7 @@ const Orders = () => {
         variant: "destructive",
       });
     }
-  };
+  }, [orders, toast]);
 
   useEffect(() => {
     fetchOrders();
@@ -180,6 +266,12 @@ const Orders = () => {
       supabase.removeChannel(channel);
     };
   }, [fetchOrders]);
+
+  // Monitorar mudanças no estado de comandas
+  useEffect(() => {
+    console.log('🔄 Estado de comandas atualizado:', orders.length, 'comandas');
+    console.log('📋 IDs das comandas atuais:', orders.map(o => ({ id: o.id, number: o.order_number })));
+  }, [orders]);
 
   const handleCancelOrder = async (orderId: string) => {
     const { error } = await supabase
@@ -251,7 +343,7 @@ const Orders = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6">
+          <div key={refreshKey} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6">
             {orders.map((order) => (
               <Card key={order.id} className="shadow-soft hover:shadow-lg transition-smooth">
                 <CardHeader>
