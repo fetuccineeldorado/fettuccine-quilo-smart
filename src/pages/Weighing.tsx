@@ -273,6 +273,47 @@ const Weighing = () => {
               onClick={async () => {
                 setPrinting(true);
                 try {
+                  const success = await ThermalPrinter.directUSBPrint(`
+${ThermalPrinter.CENTER}${ThermalPrinter.BOLD}${ThermalPrinter.EXTRA_LARGE}TESTE DIRETO USB${ThermalPrinter.NORMAL}
+${ThermalPrinter.MEDIUM}================================
+${ThermalPrinter.SMALL}Data: ${new Date().toLocaleString('pt-BR')}
+Status: Impressão Direta USB
+================================
+${ThermalPrinter.FEED}${ThermalPrinter.FEED}${ThermalPrinter.CUT}
+                  `);
+                  if (success) {
+                    toast({
+                      title: "Impressão direta USB",
+                      description: "Cupom enviado via impressão direta USB",
+                    });
+                  } else {
+                    toast({
+                      title: "Erro na impressão direta",
+                      description: "Não foi possível imprimir via USB direto",
+                      variant: "destructive",
+                    });
+                  }
+                } catch (error) {
+                  toast({
+                    title: "Erro na impressão direta",
+                    description: "Erro ao imprimir via USB direto",
+                    variant: "destructive",
+                  });
+                } finally {
+                  setPrinting(false);
+                }
+              }}
+              variant="outline"
+              disabled={printing}
+              className="flex items-center gap-2"
+            >
+              <Printer className="h-4 w-4" />
+              {printing ? "Imprimindo..." : "Impressão Direta USB"}
+            </Button>
+            <Button
+              onClick={async () => {
+                setPrinting(true);
+                try {
                   const success = await ThermalPrinter.testPrinter();
                   if (success) {
                     toast({

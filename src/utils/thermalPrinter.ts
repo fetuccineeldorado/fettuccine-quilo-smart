@@ -152,12 +152,124 @@ export class ThermalPrinter {
   // Enviar para impressora
   static async printReceipt(receipt: string): Promise<boolean> {
     try {
-      // Verificar se a Web USB API está disponível
-      if (!navigator.usb) {
-        console.warn('Web USB API não disponível. Usando fallback para impressão.');
-        return this.fallbackPrint(receipt);
+      // Tentar impressão direta via USB primeiro
+      const directPrint = await this.directUSBPrint(receipt);
+      if (directPrint) {
+        return true;
       }
 
+      // Fallback para Web USB API
+      if (navigator.usb) {
+        return await this.webUSBPrint(receipt);
+      }
+
+      // Fallback final para impressão no navegador
+      return this.fallbackPrint(receipt);
+    } catch (error) {
+      console.error('Erro ao imprimir:', error);
+      return this.fallbackPrint(receipt);
+    }
+  }
+
+  // Impressão direta via USB (sem Web USB API)
+  private static async directUSBPrint(receipt: string): Promise<boolean> {
+    try {
+      // Método 1: Tentar impressão via endpoint local
+      const localPrint = await this.tryLocalPrint(receipt);
+      if (localPrint) return true;
+
+      // Método 2: Tentar impressão via Web Serial (se disponível)
+      const serialPrint = await this.trySerialPrint(receipt);
+      if (serialPrint) return true;
+
+      // Método 3: Tentar impressão via Web Bluetooth (se disponível)
+      const bluetoothPrint = await this.tryBluetoothPrint(receipt);
+      if (bluetoothPrint) return true;
+
+    } catch (error) {
+      console.log('Impressão direta não disponível, tentando outros métodos...');
+    }
+    return false;
+  }
+
+  // Tentar impressão via endpoint local
+  private static async tryLocalPrint(receipt: string): Promise<boolean> {
+    try {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(receipt);
+      const blob = new Blob([data], { type: 'application/octet-stream' });
+      
+      const response = await fetch('/api/print', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+        },
+        body: blob
+      });
+
+      return response.ok;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // Tentar impressão via Web Serial
+  private static async trySerialPrint(receipt: string): Promise<boolean> {
+    try {
+      if (!navigator.serial) return false;
+
+      const port = await navigator.serial.requestPort({
+        filters: [
+          { usbVendorId: 0x04b8 }, // Epson
+          { usbVendorId: 0x04a9 }, // Canon
+          { usbVendorId: 0x03f0 }, // HP
+        ]
+      });
+
+      await port.open({ baudRate: 9600 });
+      const writer = port.writable.getWriter();
+      const encoder = new TextEncoder();
+      await writer.write(encoder.encode(receipt));
+      writer.releaseLock();
+      await port.close();
+
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // Tentar impressão via Web Bluetooth
+  private static async tryBluetoothPrint(receipt: string): Promise<boolean> {
+    try {
+      if (!navigator.bluetooth) return false;
+
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [
+          { namePrefix: 'Printer' },
+          { namePrefix: 'EPSON' },
+          { namePrefix: 'Canon' },
+        ],
+        optionalServices: ['0000180a-0000-1000-8000-00805f9b34fb']
+      });
+
+      const server = await device.gatt.connect();
+      const service = await server.getPrimaryService('0000180a-0000-1000-8000-00805f9b34fb');
+      const characteristic = await service.getCharacteristic('00002a50-0000-1000-8000-00805f9b34fb');
+      
+      const encoder = new TextEncoder();
+      await characteristic.writeValue(encoder.encode(receipt));
+      
+      await server.disconnect();
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // Impressão via Web USB API
+  private static async webUSBPrint(receipt: string): Promise<boolean> {
+    try {
       // Solicitar acesso à impressora USB
       const device = await navigator.usb.requestDevice({
         filters: [
@@ -190,8 +302,8 @@ export class ThermalPrinter {
 
       return true;
     } catch (error) {
-      console.error('Erro ao imprimir via USB:', error);
-      return this.fallbackPrint(receipt);
+      console.error('Erro ao imprimir via Web USB:', error);
+      return false;
     }
   }
 
@@ -265,6 +377,34 @@ export class ThermalPrinter {
     } catch (error) {
       console.error('Erro ao detectar impressoras USB:', error);
       return [];
+    }
+  }
+
+  // Impressão direta via USB (método alternativo)
+  static async directUSBPrint(receipt: string): Promise<boolean> {
+    try {
+      // Criar um arquivo de impressão temporário
+      const encoder = new TextEncoder();
+      const data = encoder.encode(receipt);
+      const blob = new Blob([data], { type: 'text/plain' });
+      
+      // Criar URL do blob
+      const url = URL.createObjectURL(blob);
+      
+      // Tentar abrir em nova janela para impressão direta
+      const printWindow = window.open(url, '_blank');
+      if (printWindow) {
+        printWindow.focus();
+        printWindow.print();
+        printWindow.close();
+        URL.revokeObjectURL(url);
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Erro na impressão direta USB:', error);
+      return false;
     }
   }
 
