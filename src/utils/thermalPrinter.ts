@@ -32,10 +32,12 @@ export class ThermalPrinter {
 
   // Comandos de formatação
   private static CENTER = '\x1B\x61\x01'; // Centralizar texto
+  private static LEFT = '\x1B\x61\x00'; // Alinhar à esquerda
   private static BOLD = '\x1B\x45\x01'; // Texto em negrito
   private static NORMAL = '\x1B\x45\x00'; // Texto normal
-  private static LARGE = '\x1B\x21\x30'; // Texto grande
-  private static MEDIUM = '\x1B\x21\x20'; // Texto médio
+  private static LARGE = '\x1B\x21\x30'; // Texto grande (2x altura e largura)
+  private static EXTRA_LARGE = '\x1B\x21\x50'; // Texto extra grande (3x altura e largura)
+  private static MEDIUM = '\x1B\x21\x20'; // Texto médio (2x altura)
   private static SMALL = '\x1B\x21\x00'; // Texto pequeno
   private static CUT = '\x1D\x56\x00'; // Corte do papel
   private static FEED = '\x0A'; // Avançar linha
@@ -47,10 +49,10 @@ export class ThermalPrinter {
     // Cabeçalho
     receipt += this.CENTER;
     receipt += this.BOLD;
-    receipt += this.LARGE;
+    receipt += this.EXTRA_LARGE;
     receipt += 'FETTUCCINE ELDORADO\n';
     receipt += this.NORMAL;
-    receipt += this.SMALL;
+    receipt += this.MEDIUM;
     receipt += 'Sistema de Pesagem por Quilo\n';
     receipt += '================================\n';
     receipt += this.FEED;
@@ -58,52 +60,73 @@ export class ThermalPrinter {
     // Dados da comanda
     receipt += this.CENTER;
     receipt += this.BOLD;
-    receipt += this.MEDIUM;
+    receipt += this.LARGE;
     receipt += `COMANDA #${orderData.order_number.toString().padStart(3, '0')}\n`;
     receipt += this.NORMAL;
-    receipt += this.SMALL;
+    receipt += this.MEDIUM;
     receipt += `Cliente: ${orderData.customer_name}\n`;
     receipt += `Data: ${new Date(orderData.created_at).toLocaleString('pt-BR')}\n`;
     receipt += '================================\n';
     receipt += this.FEED;
 
     // Itens da comanda
+    receipt += this.LEFT;
+    receipt += this.BOLD;
+    receipt += this.MEDIUM;
+    receipt += 'ITENS DA COMANDA:\n';
     receipt += this.NORMAL;
     receipt += this.SMALL;
-    receipt += 'ITENS DA COMANDA:\n';
     receipt += '--------------------------------\n';
 
     // Comida por quilo
     if (orderData.items.length > 0) {
       const foodItem = orderData.items[0];
+      receipt += this.MEDIUM;
       receipt += `${foodItem.description}\n`;
+      receipt += this.SMALL;
       receipt += `Peso: ${orderData.total_weight.toFixed(3)} kg\n`;
       receipt += `Preço/kg: R$ ${foodItem.unit_price.toFixed(2)}\n`;
+      receipt += this.BOLD;
       receipt += `Subtotal: R$ ${foodItem.total_price.toFixed(2)}\n`;
+      receipt += this.NORMAL;
       receipt += '--------------------------------\n';
     }
 
     // Itens extra
     if (orderData.extra_items.length > 0) {
+      receipt += this.BOLD;
+      receipt += this.MEDIUM;
       receipt += 'ITENS EXTRA:\n';
+      receipt += this.NORMAL;
+      receipt += this.SMALL;
       orderData.extra_items.forEach(item => {
+        receipt += this.MEDIUM;
         receipt += `${item.quantity}x ${item.name}\n`;
-        receipt += `R$ ${item.unit_price.toFixed(2)} x ${item.quantity} = R$ ${item.total_price.toFixed(2)}\n`;
+        receipt += this.SMALL;
+        receipt += `R$ ${item.unit_price.toFixed(2)} x ${item.quantity} = `;
+        receipt += this.BOLD;
+        receipt += `R$ ${item.total_price.toFixed(2)}\n`;
+        receipt += this.NORMAL;
       });
       receipt += '--------------------------------\n';
     }
 
     // Totais
     receipt += this.FEED;
+    receipt += this.CENTER;
     receipt += this.BOLD;
+    receipt += this.LARGE;
     receipt += 'RESUMO:\n';
+    receipt += this.NORMAL;
+    receipt += this.MEDIUM;
     receipt += '--------------------------------\n';
     receipt += `Comida: R$ ${orderData.food_total.toFixed(2)}\n`;
     if (orderData.extra_items_total > 0) {
       receipt += `Itens Extra: R$ ${orderData.extra_items_total.toFixed(2)}\n`;
     }
     receipt += '--------------------------------\n';
-    receipt += this.LARGE;
+    receipt += this.BOLD;
+    receipt += this.EXTRA_LARGE;
     receipt += `TOTAL: R$ ${orderData.total_amount.toFixed(2)}\n`;
     receipt += this.NORMAL;
     receipt += this.SMALL;
@@ -112,8 +135,10 @@ export class ThermalPrinter {
     receipt += this.FEED;
     receipt += this.CENTER;
     receipt += '================================\n';
+    receipt += this.MEDIUM;
     receipt += 'Obrigado pela preferência!\n';
     receipt += 'Volte sempre!\n';
+    receipt += this.SMALL;
     receipt += this.FEED;
     receipt += this.FEED;
     receipt += this.FEED;
@@ -211,9 +236,9 @@ export class ThermalPrinter {
   // Testar impressora
   static async testPrinter(): Promise<boolean> {
     const testReceipt = `
-${this.CENTER}${this.BOLD}${this.LARGE}TESTE DE IMPRESSORA${this.NORMAL}
-${this.SMALL}================================
-Data: ${new Date().toLocaleString('pt-BR')}
+${this.CENTER}${this.BOLD}${this.EXTRA_LARGE}TESTE DE IMPRESSORA${this.NORMAL}
+${this.MEDIUM}================================
+${this.SMALL}Data: ${new Date().toLocaleString('pt-BR')}
 Status: OK
 ================================
 ${this.FEED}${this.FEED}${this.CUT}
