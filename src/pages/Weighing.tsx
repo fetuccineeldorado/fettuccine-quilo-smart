@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/DashboardLayout";
 import ExtraItemsSelector from "@/components/ExtraItemsSelector";
-import { AlertCircle, Utensils } from "lucide-react";
+import { ThermalPrinter, OrderData } from "@/utils/thermalPrinter";
+import { AlertCircle, Utensils, Printer } from "lucide-react";
 
 
 const Weighing = () => {
@@ -24,6 +25,7 @@ const Weighing = () => {
     price: number;
     quantity: number;
   }>>([]);
+  const [printing, setPrinting] = useState(false);
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -150,6 +152,9 @@ const Weighing = () => {
         description: `Comanda #${order.order_number} - ${customerName} - R$ ${total.toFixed(2)}`,
       });
 
+      // Imprimir comanda
+      await printOrderReceipt(order, weightNum, foodTotal, extraItemsTotal);
+
       // Reset form
       setCustomerName("");
       setWeight("");
@@ -170,14 +175,102 @@ const Weighing = () => {
     }
   };
 
+  const printOrderReceipt = async (order: any, weight: number, foodTotal: number, extraItemsTotal: number) => {
+    setPrinting(true);
+    try {
+      const orderData: OrderData = {
+        order_number: order.order_number,
+        customer_name: customerName,
+        total_weight: weight,
+        food_total: foodTotal,
+        extra_items_total: extraItemsTotal,
+        total_amount: foodTotal + extraItemsTotal,
+        created_at: order.created_at,
+        items: [{
+          description: `Comida por quilo - ${weight}kg`,
+          quantity: weight,
+          unit_price: pricePerKg,
+          total_price: foodTotal,
+        }],
+        extra_items: selectedExtraItems.map(item => ({
+          name: item.name,
+          quantity: item.quantity,
+          unit_price: item.price,
+          total_price: item.price * item.quantity,
+        }))
+      };
+
+      const receipt = ThermalPrinter.generateReceipt(orderData);
+      const success = await ThermalPrinter.printReceipt(receipt);
+
+      if (success) {
+        toast({
+          title: "Comanda impressa!",
+          description: "Cupom térmico enviado para impressora",
+        });
+      } else {
+        toast({
+          title: "Aviso de impressão",
+          description: "Comanda criada, mas impressão pode ter falhado",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao imprimir comanda:', error);
+      toast({
+        title: "Erro na impressão",
+        description: "Comanda criada, mas não foi possível imprimir",
+        variant: "destructive",
+      });
+    } finally {
+      setPrinting(false);
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="p-8 max-w-6xl mx-auto space-y-8">
-        <div>
-          <h1 className="text-4xl font-bold mb-2">Pesagem</h1>
-          <p className="text-muted-foreground text-lg">
-            Sistema de pesagem manual por quilo
-          </p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-4xl font-bold mb-2">Pesagem</h1>
+            <p className="text-muted-foreground text-lg">
+              Sistema de pesagem manual por quilo
+            </p>
+          </div>
+          <Button
+            onClick={async () => {
+              setPrinting(true);
+              try {
+                const success = await ThermalPrinter.testPrinter();
+                if (success) {
+                  toast({
+                    title: "Teste de impressão",
+                    description: "Cupom de teste enviado para impressora",
+                  });
+                } else {
+                  toast({
+                    title: "Erro no teste",
+                    description: "Não foi possível imprimir teste",
+                    variant: "destructive",
+                  });
+                }
+              } catch (error) {
+                toast({
+                  title: "Erro no teste",
+                  description: "Erro ao testar impressora",
+                  variant: "destructive",
+                });
+              } finally {
+                setPrinting(false);
+              }
+            }}
+            variant="outline"
+            disabled={printing}
+            className="flex items-center gap-2"
+          >
+            <Printer className="h-4 w-4" />
+            {printing ? "Testando..." : "Testar Impressora"}
+          </Button>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
@@ -312,11 +405,11 @@ const Weighing = () => {
 
               <Button
                 onClick={handleCreateOrder}
-                disabled={!weight || Number(weight) <= 0 || !customerName.trim() || loading}
+                disabled={!weight || Number(weight) <= 0 || !customerName.trim() || loading || printing}
                 size="lg"
                 className="w-full"
               >
-                {loading ? "Criando..." : "Criar Comanda"}
+                {loading ? "Criando..." : printing ? "Imprimindo..." : "Criar Comanda"}
               </Button>
             </CardContent>
           </Card>
