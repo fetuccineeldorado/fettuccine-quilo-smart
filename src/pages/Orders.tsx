@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/DashboardLayout";
-import { FileText, Eye, XCircle, Clock, Edit } from "lucide-react";
+import { FileText, Eye, XCircle, Clock, Edit, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
@@ -59,6 +59,103 @@ const Orders = () => {
       setLoading(false);
     }
   }, [toast]);
+
+  const handleDeleteOrder = async (orderId: string, orderNumber: number, status: string) => {
+    console.log('🗑️ Iniciando exclusão da comanda:', { orderId, orderNumber, status });
+    
+    // Diferentes mensagens de confirmação baseadas no status
+    let confirmMessage = `Tem certeza que deseja excluir a comanda #${orderNumber}?\n\n`;
+    
+    if (status === "open") {
+      confirmMessage += "⚠️ ATENÇÃO: Esta comanda está ABERTA e pode ter vendas ativas.\n\n";
+    } else if (status === "closed") {
+      confirmMessage += "⚠️ ATENÇÃO: Esta comanda está FECHADA e pode ter dados de vendas importantes.\n\n";
+    } else if (status === "cancelled") {
+      confirmMessage += "Esta comanda foi cancelada e pode ser excluída com segurança.\n\n";
+    }
+    
+    confirmMessage += "Esta ação não pode ser desfeita e irá remover todos os dados relacionados à comanda.";
+    
+    if (!confirm(confirmMessage)) {
+      console.log('❌ Usuário cancelou a exclusão');
+      return;
+    }
+    
+    console.log('✅ Usuário confirmou a exclusão, iniciando processo...');
+
+    try {
+      console.log('🔄 Iniciando exclusão da comanda...');
+      
+      // Primeiro, deletar itens relacionados
+      console.log('🔄 Passo 1: Deletando itens da comanda...');
+      const { error: itemsError } = await supabase
+        .from("order_items")
+        .delete()
+        .eq("order_id", orderId);
+
+      if (itemsError) {
+        console.error('❌ Erro ao deletar itens da comanda:', itemsError);
+        throw itemsError;
+      }
+      console.log('✅ Itens da comanda deletados com sucesso');
+
+      // Deletar itens extras relacionados
+      console.log('🔄 Passo 2: Deletando itens extras...');
+      const { error: extraItemsError } = await supabase
+        .from("order_extra_items")
+        .delete()
+        .eq("order_id", orderId);
+
+      if (extraItemsError) {
+        console.error('❌ Erro ao deletar itens extras da comanda:', extraItemsError);
+        throw extraItemsError;
+      }
+      console.log('✅ Itens extras deletados com sucesso');
+
+      // Deletar pagamentos relacionados
+      console.log('🔄 Passo 3: Deletando pagamentos...');
+      const { error: paymentsError } = await supabase
+        .from("payments")
+        .delete()
+        .eq("order_id", orderId);
+
+      if (paymentsError) {
+        console.error('❌ Erro ao deletar pagamentos da comanda:', paymentsError);
+        throw paymentsError;
+      }
+      console.log('✅ Pagamentos deletados com sucesso');
+
+      // Finalmente, deletar a comanda
+      console.log('🔄 Passo 4: Deletando comanda principal...');
+      const { error: orderError } = await supabase
+        .from("orders")
+        .delete()
+        .eq("id", orderId);
+
+      if (orderError) {
+        console.error('❌ Erro ao deletar comanda:', orderError);
+        throw orderError;
+      }
+      console.log('✅ Comanda principal deletada com sucesso');
+
+      console.log('🎉 Exclusão concluída com sucesso!');
+      toast({
+        title: "Comanda excluída!",
+        description: `Comanda #${orderNumber} foi excluída com sucesso.`,
+      });
+
+      // Recarregar a lista de comandas
+      console.log('🔄 Recarregando lista de comandas...');
+      fetchOrders();
+    } catch (error: unknown) {
+      console.error('💥 Erro geral ao excluir comanda:', error);
+      toast({
+        title: "Erro ao excluir comanda",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      });
+    }
+  };
 
   useEffect(() => {
     fetchOrders();
@@ -190,6 +287,15 @@ const Orders = () => {
                             <XCircle className="h-4 w-4 mr-2" />
                             Cancelar
                           </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDeleteOrder(order.id, order.order_number, order.status)}
+                            className="bg-red-600 hover:bg-red-700"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Excluir
+                          </Button>
                         </>
                       )}
                       {order.status === "pending" && (
@@ -200,6 +306,18 @@ const Orders = () => {
                         >
                           <Edit className="h-4 w-4 mr-2" />
                           Sendo Editada
+                        </Button>
+                      )}
+                      {/* Botão de exclusão para comandas fechadas/canceladas */}
+                      {(order.status === "closed" || order.status === "cancelled") && (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDeleteOrder(order.id, order.order_number, order.status)}
+                          className="bg-red-600 hover:bg-red-700"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Excluir
                         </Button>
                       )}
                     </div>
