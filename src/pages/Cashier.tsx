@@ -15,6 +15,7 @@ interface Order {
   total_amount: number;
   total_weight: number;
   status: string;
+  customer_name: string;
 }
 
 const Cashier = () => {
@@ -33,7 +34,7 @@ const Cashier = () => {
     try {
       const { data, error } = await supabase
         .from("orders")
-        .select("*")
+        .select("id, order_number, total_amount, total_weight, status, customer_name")
         .eq("status", "open")
         .order("order_number", { ascending: false });
 
@@ -177,7 +178,7 @@ const Cashier = () => {
                   <SelectContent>
                     {orders.map((order) => (
                       <SelectItem key={order.id} value={order.id}>
-                        Comanda #{order.order_number} - R$ {Number(order.total_amount).toFixed(2)}
+                        Comanda #{order.order_number} - {order.customer_name} - R$ {Number(order.total_amount).toFixed(2)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -186,6 +187,12 @@ const Cashier = () => {
 
               {selectedOrder && (
                 <div className="space-y-3 p-4 bg-accent/30 rounded-lg">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Cliente</span>
+                    <span className="font-semibold">
+                      {selectedOrder.customer_name}
+                    </span>
+                  </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Peso</span>
                     <span className="font-semibold">
