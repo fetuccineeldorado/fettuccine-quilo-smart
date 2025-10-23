@@ -351,6 +351,40 @@ ${ThermalPrinter.FEED}${ThermalPrinter.FEED}${ThermalPrinter.CUT}
               <Printer className="h-4 w-4" />
               {printing ? "Testando..." : "Testar Impressora"}
             </Button>
+            <Button
+              onClick={async () => {
+                setPrinting(true);
+                try {
+                  const success = await ThermalPrinter.testPrinterWithItems();
+                  if (success) {
+                    toast({
+                      title: "Teste com itens extra",
+                      description: "Cupom com itens extra enviado para impressora",
+                    });
+                  } else {
+                    toast({
+                      title: "Erro no teste",
+                      description: "Não foi possível imprimir teste com itens",
+                      variant: "destructive",
+                    });
+                  }
+                } catch (error) {
+                  toast({
+                    title: "Erro no teste",
+                    description: "Erro ao testar impressora com itens",
+                    variant: "destructive",
+                  });
+                } finally {
+                  setPrinting(false);
+                }
+              }}
+              variant="outline"
+              disabled={printing}
+              className="flex items-center gap-2"
+            >
+              <Printer className="h-4 w-4" />
+              {printing ? "Testando..." : "Teste com Itens"}
+            </Button>
           </div>
         </div>
 

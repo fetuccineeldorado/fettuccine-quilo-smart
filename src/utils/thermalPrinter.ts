@@ -322,42 +322,83 @@ export class ThermalPrinter {
         return false;
       }
 
+      // Converter comandos de impressão térmica para HTML
+      const htmlReceipt = this.convertThermalToHTML(receipt);
+
       printWindow.document.write(`
         <html>
           <head>
-            <title>Comanda #${new Date().getTime()}</title>
+            <title>Comanda - ${new Date().toLocaleString('pt-BR')}</title>
             <style>
+              @media print {
+                body { margin: 0; }
+              }
               body {
                 font-family: 'Courier New', monospace;
                 font-size: 12px;
                 line-height: 1.2;
                 margin: 0;
                 padding: 10px;
-                white-space: pre-line;
+                max-width: 300px;
+                margin: 0 auto;
               }
               .center { text-align: center; }
               .bold { font-weight: bold; }
-              .large { font-size: 16px; }
+              .large { font-size: 18px; }
               .medium { font-size: 14px; }
               .small { font-size: 10px; }
+              .extra-large { font-size: 22px; }
+              .separator { border-bottom: 1px dashed #000; margin: 5px 0; }
             </style>
           </head>
           <body>
-            ${receipt.replace(/\n/g, '<br>')}
+            ${htmlReceipt}
           </body>
         </html>
       `);
 
       printWindow.document.close();
       printWindow.focus();
-      printWindow.print();
-      printWindow.close();
+      
+      // Aguardar um pouco antes de imprimir para garantir que o conteúdo carregou
+      setTimeout(() => {
+        printWindow.print();
+        setTimeout(() => printWindow.close(), 1000);
+      }, 500);
 
       return true;
     } catch (error) {
       console.error('Erro no fallback de impressão:', error);
       return false;
     }
+  }
+
+  // Converter comandos térmicos para HTML
+  private static convertThermalToHTML(receipt: string): string {
+    let html = receipt;
+    
+    // Converter comandos de formatação para HTML
+    html = html.replace(/\x1B\x61\x01/g, '<div class="center">'); // CENTER
+    html = html.replace(/\x1B\x61\x00/g, '<div class="left">'); // LEFT
+    html = html.replace(/\x1B\x45\x01/g, '<span class="bold">'); // BOLD
+    html = html.replace(/\x1B\x45\x00/g, '</span>'); // NORMAL
+    html = html.replace(/\x1B\x21\x50/g, '<span class="extra-large">'); // EXTRA_LARGE
+    html = html.replace(/\x1B\x21\x30/g, '<span class="large">'); // LARGE
+    html = html.replace(/\x1B\x21\x20/g, '<span class="medium">'); // MEDIUM
+    html = html.replace(/\x1B\x21\x00/g, '<span class="small">'); // SMALL
+    
+    // Converter quebras de linha
+    html = html.replace(/\n/g, '<br>');
+    
+    // Adicionar separadores visuais
+    html = html.replace(/={30,}/g, '<div class="separator"></div>');
+    html = html.replace(/-{30,}/g, '<div class="separator"></div>');
+    
+    // Fechar tags abertas
+    html = html.replace(/<div class="center">/g, '<div class="center">');
+    html = html.replace(/<div class="left">/g, '<div class="left">');
+    
+    return html;
   }
 
   // Detectar impressoras USB disponíveis
@@ -425,6 +466,42 @@ Status: OK
 ${this.FEED}${this.FEED}${this.CUT}
     `;
 
+    return await this.printReceipt(testReceipt);
+  }
+
+  // Testar impressão com itens extra
+  static async testPrinterWithItems(): Promise<boolean> {
+    const testOrderData: OrderData = {
+      order_number: 999,
+      customer_name: "Cliente Teste",
+      total_weight: 0.500,
+      food_total: 27.45,
+      extra_items_total: 25.00,
+      total_amount: 52.45,
+      created_at: new Date().toISOString(),
+      items: [{
+        description: "Comida por quilo - 0.500kg",
+        quantity: 0.500,
+        unit_price: 54.90,
+        total_price: 27.45,
+      }],
+      extra_items: [
+        {
+          name: "Coca lata",
+          quantity: 1,
+          unit_price: 7.00,
+          total_price: 7.00,
+        },
+        {
+          name: "Coca 600ml",
+          quantity: 2,
+          unit_price: 9.00,
+          total_price: 18.00,
+        }
+      ]
+    };
+
+    const testReceipt = this.generateReceipt(testOrderData);
     return await this.printReceipt(testReceipt);
   }
 }
