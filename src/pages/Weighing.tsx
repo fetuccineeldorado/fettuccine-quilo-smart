@@ -182,33 +182,8 @@ const Weighing = () => {
       console.log('Itens extra selecionados:', selectedExtraItems);
       console.log('Total de itens extra:', extraItemsTotal);
 
-      const orderData: OrderData = {
-        order_number: order.order_number,
-        customer_name: customerName,
-        total_weight: weight,
-        food_total: foodTotal,
-        extra_items_total: extraItemsTotal,
-        total_amount: foodTotal + extraItemsTotal,
-        created_at: order.created_at,
-        items: [{
-          description: `Comida por quilo - ${weight}kg`,
-          quantity: weight,
-          unit_price: pricePerKg,
-          total_price: foodTotal,
-        }],
-        extra_items: selectedExtraItems.map(item => ({
-          name: item.name,
-          quantity: item.quantity,
-          unit_price: item.price,
-          total_price: item.price * item.quantity,
-        }))
-      };
-
-      // Debug: verificar dados da comanda
-      console.log('Dados da comanda para impressão:', orderData);
-
-      const receipt = ThermalPrinter.generateReceipt(orderData);
-      const success = await ThermalPrinter.printReceipt(receipt);
+      // Usar impressão direta com HTML
+      const success = await ThermalPrinter.printOrderDirect(order, customerName, weight, foodTotal, selectedExtraItems, extraItemsTotal);
 
       if (success) {
         toast({
@@ -384,6 +359,40 @@ ${ThermalPrinter.FEED}${ThermalPrinter.FEED}${ThermalPrinter.CUT}
             >
               <Printer className="h-4 w-4" />
               {printing ? "Testando..." : "Teste com Itens"}
+            </Button>
+            <Button
+              onClick={async () => {
+                setPrinting(true);
+                try {
+                  const success = await ThermalPrinter.forcePrintWithItems();
+                  if (success) {
+                    toast({
+                      title: "Impressão forçada",
+                      description: "Cupom com itens extra (HTML direto) enviado para impressora",
+                    });
+                  } else {
+                    toast({
+                      title: "Erro na impressão forçada",
+                      description: "Não foi possível imprimir teste forçado",
+                      variant: "destructive",
+                    });
+                  }
+                } catch (error) {
+                  toast({
+                    title: "Erro na impressão forçada",
+                    description: "Erro ao testar impressão forçada",
+                    variant: "destructive",
+                  });
+                } finally {
+                  setPrinting(false);
+                }
+              }}
+              variant="outline"
+              disabled={printing}
+              className="flex items-center gap-2"
+            >
+              <Printer className="h-4 w-4" />
+              {printing ? "Imprimindo..." : "Forçar Impressão"}
             </Button>
           </div>
         </div>

@@ -470,6 +470,201 @@ export class ThermalPrinter {
     }
   }
 
+  // Impressão forçada com HTML simples
+  static async forcePrintWithItems(): Promise<boolean> {
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return false;
+
+      const htmlContent = `
+        <html>
+          <head>
+            <title>Comanda Teste</title>
+            <style>
+              body { 
+                font-family: 'Courier New', monospace; 
+                font-size: 12px; 
+                max-width: 300px; 
+                margin: 0 auto; 
+                padding: 10px;
+              }
+              .center { text-align: center; }
+              .bold { font-weight: bold; }
+              .separator { border-bottom: 1px dashed #000; margin: 5px 0; }
+            </style>
+          </head>
+          <body>
+            <div class="center">
+              <div class="bold" style="font-size: 18px;">FETTUCCINE ELDORADO</div>
+              <div>Sistema de Pesagem por Quilo</div>
+              <div class="separator"></div>
+            </div>
+            
+            <div class="center">
+              <div class="bold" style="font-size: 16px;">COMANDA #999</div>
+              <div>Cliente: Cliente Teste</div>
+              <div>Data: ${new Date().toLocaleString('pt-BR')}</div>
+              <div class="separator"></div>
+            </div>
+            
+            <div>
+              <div class="bold">ITENS DA COMANDA:</div>
+              <div class="separator"></div>
+              <div>Comida por quilo - 0.500kg</div>
+              <div>Peso: 0.500 kg</div>
+              <div>Preço/kg: R$ 54,90</div>
+              <div class="bold">Subtotal: R$ 27,45</div>
+              <div class="separator"></div>
+            </div>
+            
+            <div>
+              <div class="bold">ITENS EXTRA:</div>
+              <div>1x Coca lata</div>
+              <div>R$ 7,00 x 1 = R$ 7,00</div>
+              <div>2x Coca 600ml</div>
+              <div>R$ 9,00 x 2 = R$ 18,00</div>
+              <div class="separator"></div>
+            </div>
+            
+            <div class="center">
+              <div class="bold" style="font-size: 16px;">RESUMO:</div>
+              <div class="separator"></div>
+              <div>Comida: R$ 27,45</div>
+              <div>Itens Extra: R$ 25,00</div>
+              <div class="separator"></div>
+              <div class="bold" style="font-size: 18px;">TOTAL: R$ 52,45</div>
+              <div class="separator"></div>
+            </div>
+            
+            <div class="center">
+              <div>Obrigado pela preferência!</div>
+              <div>Volte sempre!</div>
+            </div>
+          </body>
+        </html>
+      `;
+
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      printWindow.focus();
+      
+      setTimeout(() => {
+        printWindow.print();
+        setTimeout(() => printWindow.close(), 1000);
+      }, 500);
+
+      return true;
+    } catch (error) {
+      console.error('Erro na impressão forçada:', error);
+      return false;
+    }
+  }
+
+  // Impressão direta de comanda com dados reais
+  static async printOrderDirect(order: any, customerName: string, weight: number, foodTotal: number, selectedExtraItems: any[], extraItemsTotal: number): Promise<boolean> {
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return false;
+
+      console.log('Imprimindo comanda direta:', {
+        order,
+        customerName,
+        weight,
+        foodTotal,
+        selectedExtraItems,
+        extraItemsTotal
+      });
+
+      // Gerar HTML com dados reais
+      const extraItemsHTML = selectedExtraItems.length > 0 ? `
+        <div>
+          <div class="bold">ITENS EXTRA:</div>
+          <div class="separator"></div>
+          ${selectedExtraItems.map(item => `
+            <div>${item.quantity}x ${item.name}</div>
+            <div>R$ ${item.price.toFixed(2)} x ${item.quantity} = R$ ${(item.price * item.quantity).toFixed(2)}</div>
+          `).join('')}
+          <div class="separator"></div>
+        </div>
+      ` : '';
+
+      const htmlContent = `
+        <html>
+          <head>
+            <title>Comanda #${order.order_number}</title>
+            <style>
+              body { 
+                font-family: 'Courier New', monospace; 
+                font-size: 12px; 
+                max-width: 300px; 
+                margin: 0 auto; 
+                padding: 10px;
+              }
+              .center { text-align: center; }
+              .bold { font-weight: bold; }
+              .separator { border-bottom: 1px dashed #000; margin: 5px 0; }
+            </style>
+          </head>
+          <body>
+            <div class="center">
+              <div class="bold" style="font-size: 18px;">FETTUCCINE ELDORADO</div>
+              <div>Sistema de Pesagem por Quilo</div>
+              <div class="separator"></div>
+            </div>
+            
+            <div class="center">
+              <div class="bold" style="font-size: 16px;">COMANDA #${order.order_number}</div>
+              <div>Cliente: ${customerName}</div>
+              <div>Data: ${new Date().toLocaleString('pt-BR')}</div>
+              <div class="separator"></div>
+            </div>
+            
+            <div>
+              <div class="bold">ITENS DA COMANDA:</div>
+              <div class="separator"></div>
+              <div>Comida por quilo - ${weight}kg</div>
+              <div>Peso: ${weight} kg</div>
+              <div>Preço/kg: R$ ${(foodTotal / weight).toFixed(2)}</div>
+              <div class="bold">Subtotal: R$ ${foodTotal.toFixed(2)}</div>
+              <div class="separator"></div>
+            </div>
+            
+            ${extraItemsHTML}
+            
+            <div class="center">
+              <div class="bold" style="font-size: 16px;">RESUMO:</div>
+              <div class="separator"></div>
+              <div>Comida: R$ ${foodTotal.toFixed(2)}</div>
+              ${extraItemsTotal > 0 ? `<div>Itens Extra: R$ ${extraItemsTotal.toFixed(2)}</div>` : ''}
+              <div class="separator"></div>
+              <div class="bold" style="font-size: 18px;">TOTAL: R$ ${(foodTotal + extraItemsTotal).toFixed(2)}</div>
+              <div class="separator"></div>
+            </div>
+            
+            <div class="center">
+              <div>Obrigado pela preferência!</div>
+              <div>Volte sempre!</div>
+            </div>
+          </body>
+        </html>
+      `;
+
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      printWindow.focus();
+      
+      setTimeout(() => {
+        printWindow.print();
+        setTimeout(() => printWindow.close(), 1000);
+      }, 500);
+
+      return true;
+    } catch (error) {
+      console.error('Erro na impressão direta:', error);
+      return false;
+    }
+  }
+
   // Testar impressora
   static async testPrinter(): Promise<boolean> {
     const testReceipt = `
@@ -516,7 +711,13 @@ ${this.FEED}${this.FEED}${this.CUT}
       ]
     };
 
+    console.log('Dados de teste para impressão:', testOrderData);
+    console.log('Itens extra no teste:', testOrderData.extra_items);
+    console.log('Quantidade de itens extra:', testOrderData.extra_items.length);
+
     const testReceipt = this.generateReceipt(testOrderData);
+    console.log('Cupom gerado:', testReceipt);
+    
     return await this.printReceipt(testReceipt);
   }
 }
