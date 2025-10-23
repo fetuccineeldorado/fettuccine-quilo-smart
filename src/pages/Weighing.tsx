@@ -8,15 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/DashboardLayout";
 import ExtraItemsSelector from "@/components/ExtraItemsSelector";
-import { AlertCircle, ShoppingCart, Utensils } from "lucide-react";
+import { AlertCircle, Utensils } from "lucide-react";
 
-interface SelectedExtraItem {
-  id: string;
-  name: string;
-  price: number;
-  quantity: number;
-  total: number;
-}
 
 const Weighing = () => {
   const navigate = useNavigate();
@@ -24,9 +17,13 @@ const Weighing = () => {
   const [weight, setWeight] = useState<string>("");
   const [pricePerKg, setPricePerKg] = useState<number>(54.90);
   const [loading, setLoading] = useState(false);
-  const [extraItems, setExtraItems] = useState<SelectedExtraItem[]>([]);
-  const [extraItemsTotal, setExtraItemsTotal] = useState<number>(0);
   const [customerName, setCustomerName] = useState<string>("");
+  const [selectedExtraItems, setSelectedExtraItems] = useState<Array<{
+    id: string;
+    name: string;
+    price: number;
+    quantity: number;
+  }>>([]);
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -63,21 +60,22 @@ const Weighing = () => {
   }, [fetchSettings]);
 
 
-  const calculateTotal = () => {
-    const weightNum = Number(weight);
-    const foodTotal = weightNum * pricePerKg;
-    return (foodTotal + extraItemsTotal).toFixed(2);
-  };
-
   const calculateFoodTotal = () => {
     const weightNum = Number(weight);
     return (weightNum * pricePerKg).toFixed(2);
   };
 
-  const handleExtraItemsChange = (items: SelectedExtraItem[], total: number) => {
-    setExtraItems(items);
-    setExtraItemsTotal(total);
+  const calculateExtraItemsTotal = () => {
+    return selectedExtraItems.reduce((total, item) => total + (item.price * item.quantity), 0);
   };
+
+  const calculateTotal = () => {
+    const weightNum = Number(weight);
+    const foodTotal = weightNum * pricePerKg;
+    const extraItemsTotal = calculateExtraItemsTotal();
+    return (foodTotal + extraItemsTotal).toFixed(2);
+  };
+
 
   const handleCreateOrder = async () => {
     if (!customerName.trim()) {
@@ -104,6 +102,7 @@ const Weighing = () => {
       
       const weightNum = Number(weight);
       const foodTotal = weightNum * pricePerKg;
+      const extraItemsTotal = calculateExtraItemsTotal();
       const total = foodTotal + extraItemsTotal;
 
       // Create new order
@@ -133,18 +132,18 @@ const Weighing = () => {
       });
 
       // Create order items for extra items
-      if (extraItems.length > 0) {
-        const extraItemsData = extraItems.map(item => ({
+      if (selectedExtraItems.length > 0) {
+        const extraItemsData = selectedExtraItems.map(item => ({
           order_id: order.id,
-          item_type: "extra_item",
-          description: item.name,
+          extra_item_id: item.id,
           quantity: item.quantity,
           unit_price: item.price,
-          total_price: item.total,
+          total_price: item.price * item.quantity,
         }));
 
-        await supabase.from("order_items").insert(extraItemsData);
+        await supabase.from("order_extra_items").insert(extraItemsData);
       }
+
 
       toast({
         title: "Comanda criada!",
@@ -154,8 +153,7 @@ const Weighing = () => {
       // Reset form
       setCustomerName("");
       setWeight("");
-      setExtraItems([]);
-      setExtraItemsTotal(0);
+      setSelectedExtraItems([]);
       
       // Navigate to orders or stay for next weighing
       setTimeout(() => {
@@ -178,11 +176,11 @@ const Weighing = () => {
         <div>
           <h1 className="text-4xl font-bold mb-2">Pesagem</h1>
           <p className="text-muted-foreground text-lg">
-            Sistema de pesagem manual por quilo com itens extras
+            Sistema de pesagem manual por quilo
           </p>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-6">
+        <div className="grid lg:grid-cols-3 gap-6">
           {/* Manual Weighing Card */}
           <Card className="shadow-strong">
             <CardHeader>
@@ -222,6 +220,22 @@ const Weighing = () => {
             </CardContent>
           </Card>
 
+          {/* Extra Items Card */}
+          <Card className="shadow-strong">
+            <CardHeader>
+              <CardTitle>Itens Extra</CardTitle>
+              <CardDescription>
+                Adicione bebidas e outros itens
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ExtraItemsSelector
+                selectedItems={selectedExtraItems}
+                onItemsChange={setSelectedExtraItems}
+              />
+            </CardContent>
+          </Card>
+
           {/* Summary Card */}
           <Card className="shadow-strong">
             <CardHeader>
@@ -251,14 +265,31 @@ const Weighing = () => {
                   </span>
                 </div>
 
-                {extraItemsTotal > 0 && (
-                  <div className="flex justify-between items-center p-4 bg-muted rounded-lg">
-                    <span className="text-muted-foreground">Itens Extras</span>
-                    <span className="text-xl font-semibold">
-                      R$ {extraItemsTotal.toFixed(2)}
-                    </span>
+                {selectedExtraItems.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center p-4 bg-muted rounded-lg">
+                      <span className="text-muted-foreground">Itens Extra</span>
+                      <span className="text-xl font-semibold">
+                        R$ {calculateExtraItemsTotal().toFixed(2)}
+                      </span>
+                    </div>
+                    
+                    {/* Lista detalhada dos itens extra */}
+                    <div className="space-y-1">
+                      {selectedExtraItems.map((item) => (
+                        <div key={item.id} className="flex justify-between items-center px-4 py-2 bg-muted/50 rounded text-sm">
+                          <span className="text-muted-foreground">
+                            {item.quantity}x {item.name}
+                          </span>
+                          <span className="font-medium">
+                            R$ {(item.price * item.quantity).toFixed(2)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
+
 
                 <div className="flex justify-between items-center p-6 bg-gradient-success rounded-lg">
                   <span className="text-success-foreground font-medium text-lg">
@@ -291,21 +322,6 @@ const Weighing = () => {
           </Card>
         </div>
 
-        {/* Extra Items Section */}
-        <Card className="shadow-strong">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShoppingCart className="h-6 w-6 text-primary" />
-              Itens Extras
-            </CardTitle>
-            <CardDescription>
-              Adicione bebidas, sobremesas e outros itens à comanda
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ExtraItemsSelector onItemsChange={handleExtraItemsChange} />
-          </CardContent>
-        </Card>
       </div>
     </DashboardLayout>
   );
