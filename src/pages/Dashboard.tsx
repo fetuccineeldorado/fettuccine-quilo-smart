@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeDemo } from "@/components/theme-demo";
+import PWAInstaller from "@/components/PWAInstaller";
 import { 
   DollarSign, 
   Users, 
@@ -218,6 +219,9 @@ const Dashboard = () => {
             </a>
           </CardContent>
         </Card>
+
+        {/* PWA Installer */}
+        <PWAInstaller />
 
         {/* Theme Demo */}
         <ThemeDemo />
