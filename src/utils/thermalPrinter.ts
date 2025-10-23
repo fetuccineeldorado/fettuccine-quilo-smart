@@ -323,7 +323,9 @@ export class ThermalPrinter {
       }
 
       // Converter comandos de impressão térmica para HTML
+      console.log('Receipt original:', receipt);
       const htmlReceipt = this.convertThermalToHTML(receipt);
+      console.log('HTML convertido:', htmlReceipt);
 
       printWindow.document.write(`
         <html>
@@ -341,6 +343,7 @@ export class ThermalPrinter {
                 padding: 10px;
                 max-width: 300px;
                 margin: 0 auto;
+                white-space: pre-line;
               }
               .center { text-align: center; }
               .bold { font-weight: bold; }
@@ -349,9 +352,15 @@ export class ThermalPrinter {
               .small { font-size: 10px; }
               .extra-large { font-size: 22px; }
               .separator { border-bottom: 1px dashed #000; margin: 5px 0; }
+              strong { font-weight: bold; }
             </style>
           </head>
           <body>
+            <div style="text-align: center;">
+              <strong style="font-size: 22px;">FETTUCCINE ELDORADO</strong><br>
+              <span style="font-size: 14px;">Sistema de Pesagem por Quilo</span><br>
+              <div class="separator"></div>
+            </div>
             ${htmlReceipt}
           </body>
         </html>
@@ -377,15 +386,19 @@ export class ThermalPrinter {
   private static convertThermalToHTML(receipt: string): string {
     let html = receipt;
     
-    // Converter comandos de formatação para HTML
-    html = html.replace(/\x1B\x61\x01/g, '<div class="center">'); // CENTER
-    html = html.replace(/\x1B\x61\x00/g, '<div class="left">'); // LEFT
-    html = html.replace(/\x1B\x45\x01/g, '<span class="bold">'); // BOLD
-    html = html.replace(/\x1B\x45\x00/g, '</span>'); // NORMAL
+    // Remover comandos de controle que não são necessários para HTML
+    html = html.replace(/\x1B\x61\x01/g, ''); // CENTER - será aplicado via CSS
+    html = html.replace(/\x1B\x61\x00/g, ''); // LEFT - será aplicado via CSS
+    html = html.replace(/\x1B\x45\x01/g, '<strong>'); // BOLD
+    html = html.replace(/\x1B\x45\x00/g, '</strong>'); // NORMAL
     html = html.replace(/\x1B\x21\x50/g, '<span class="extra-large">'); // EXTRA_LARGE
     html = html.replace(/\x1B\x21\x30/g, '<span class="large">'); // LARGE
     html = html.replace(/\x1B\x21\x20/g, '<span class="medium">'); // MEDIUM
     html = html.replace(/\x1B\x21\x00/g, '<span class="small">'); // SMALL
+    
+    // Remover comandos de feed e corte
+    html = html.replace(/\x0A/g, '\n'); // LF
+    html = html.replace(/\x1D\x56\x00/g, ''); // CUT
     
     // Converter quebras de linha
     html = html.replace(/\n/g, '<br>');
@@ -395,8 +408,10 @@ export class ThermalPrinter {
     html = html.replace(/-{30,}/g, '<div class="separator"></div>');
     
     // Fechar tags abertas
-    html = html.replace(/<div class="center">/g, '<div class="center">');
-    html = html.replace(/<div class="left">/g, '<div class="left">');
+    html = html.replace(/<span class="extra-large">/g, '<span class="extra-large">');
+    html = html.replace(/<span class="large">/g, '<span class="large">');
+    html = html.replace(/<span class="medium">/g, '<span class="medium">');
+    html = html.replace(/<span class="small">/g, '<span class="small">');
     
     return html;
   }
