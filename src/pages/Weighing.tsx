@@ -488,6 +488,7 @@ ${ThermalPrinter.FEED}${ThermalPrinter.FEED}${ThermalPrinter.CUT}
                 onCustomerSelect={handleCustomerSelect}
                 selectedCustomer={selectedCustomer}
                 placeholder="Buscar cliente cadastrado ou digite nome..."
+                onManualNameChange={(name) => setCustomerName(name)}
               />
             </CardContent>
           </Card>
@@ -516,6 +517,16 @@ ${ThermalPrinter.FEED}${ThermalPrinter.FEED}${ThermalPrinter.CUT}
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-4">
+                {/* Cliente */}
+                {customerName && (
+                  <div className="flex justify-between items-center p-4 bg-primary/10 rounded-lg border border-primary/20">
+                    <span className="text-muted-foreground">Cliente</span>
+                    <span className="text-lg font-semibold text-primary">
+                      {customerName}
+                    </span>
+                  </div>
+                )}
+                
                 <div className="flex justify-between items-center p-4 bg-muted rounded-lg">
                   <span className="text-muted-foreground">Preço por kg</span>
                   <span className="text-xl font-semibold">

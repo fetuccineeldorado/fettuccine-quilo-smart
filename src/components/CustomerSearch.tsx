@@ -21,14 +21,16 @@ interface CustomerSearchProps {
   onCustomerSelect: (customer: Customer | null) => void;
   selectedCustomer: Customer | null;
   placeholder?: string;
+  onManualNameChange?: (name: string) => void;
 }
 
-const CustomerSearch = ({ onCustomerSelect, selectedCustomer, placeholder = "Buscar cliente..." }: CustomerSearchProps) => {
+const CustomerSearch = ({ onCustomerSelect, selectedCustomer, placeholder = "Buscar cliente...", onManualNameChange }: CustomerSearchProps) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isManualInput, setIsManualInput] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -87,18 +89,29 @@ const CustomerSearch = ({ onCustomerSelect, selectedCustomer, placeholder = "Bus
   const handleSearchChange = (value: string) => {
     setSearchTerm(value);
     setShowDropdown(value.length > 0);
+    setIsManualInput(true);
+    
+    // Notify parent component about manual input
+    if (onManualNameChange) {
+      onManualNameChange(value);
+    }
   };
 
   const handleCustomerSelect = (customer: Customer) => {
     onCustomerSelect(customer);
     setSearchTerm(customer.name);
     setShowDropdown(false);
+    setIsManualInput(false);
   };
 
   const handleClearSelection = () => {
     onCustomerSelect(null);
     setSearchTerm("");
     setShowDropdown(false);
+    setIsManualInput(false);
+    if (onManualNameChange) {
+      onManualNameChange("");
+    }
     inputRef.current?.focus();
   };
 
@@ -159,8 +172,31 @@ const CustomerSearch = ({ onCustomerSelect, selectedCustomer, placeholder = "Bus
                 <div className="p-4 text-center text-muted-foreground">
                   Carregando clientes...
                 </div>
-              ) : filteredCustomers.length > 0 ? (
+              ) : filteredCustomers.length > 0 || searchTerm.length > 0 ? (
                 <div className="py-1">
+                  {/* Opção para usar nome digitado manualmente */}
+                  {searchTerm.length > 0 && (
+                    <div
+                      className="px-4 py-3 hover:bg-muted cursor-pointer border-b bg-primary/5"
+                      onClick={() => {
+                        onCustomerSelect(null);
+                        if (onManualNameChange) {
+                          onManualNameChange(searchTerm);
+                        }
+                        setShowDropdown(false);
+                        setIsManualInput(true);
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-primary" />
+                        <div>
+                          <p className="font-medium text-primary">Usar nome: "{searchTerm}"</p>
+                          <p className="text-xs text-muted-foreground">Cliente não cadastrado</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {/* Clientes cadastrados */}
                   {filteredCustomers.map((customer) => (
                     <div
                       key={customer.id}
