@@ -194,8 +194,8 @@ const Weighing = () => {
         description: `Comanda #${order.order_number} - ${finalCustomerName} - R$ ${total.toFixed(2)}`,
       });
 
-      // Imprimir comanda
-      await printOrderReceipt(order, weightNum, foodTotal, extraItemsTotal);
+          // Imprimir comanda
+          await printOrderReceipt(order, finalCustomerName, weightNum, foodTotal, extraItemsTotal);
 
       // Reset form
       setCustomerName("");
@@ -218,25 +218,35 @@ const Weighing = () => {
     }
   };
 
-  const printOrderReceipt = async (order: any, weight: number, foodTotal: number, extraItemsTotal: number) => {
+  const printOrderReceipt = async (order: any, customerName: string, weight: number, foodTotal: number, extraItemsTotal: number) => {
     setPrinting(true);
     try {
-      // Debug: verificar itens extra selecionados
-      console.log('Itens extra selecionados:', selectedExtraItems);
-      console.log('Total de itens extra:', extraItemsTotal);
+      console.log('=== INICIANDO IMPRESSÃO DE COMANDA ===');
+      
+      // Debug dos dados antes da impressão
+      ThermalPrinter.debugPrintData(
+        order, 
+        customerName, 
+        weight, 
+        foodTotal, 
+        selectedExtraItems, 
+        extraItemsTotal
+      );
 
       // Usar impressão direta com HTML
-      const success = await ThermalPrinter.printOrderDirect(order, finalCustomerName, weight, foodTotal, selectedExtraItems, extraItemsTotal);
+      const success = await ThermalPrinter.printOrderDirect(order, customerName, weight, foodTotal, selectedExtraItems, extraItemsTotal);
 
       if (success) {
+        console.log('Impressão realizada com sucesso');
         toast({
           title: "Comanda impressa!",
-          description: "Cupom térmico enviado para impressora",
+          description: "A comanda foi enviada para impressão com sucesso",
         });
       } else {
+        console.error('Falha na impressão');
         toast({
-          title: "Aviso de impressão",
-          description: "Comanda criada, mas impressão pode ter falhado",
+          title: "Erro de impressão",
+          description: "Não foi possível imprimir a comanda. Verifique a impressora ou tente novamente.",
           variant: "destructive",
         });
       }
@@ -244,7 +254,7 @@ const Weighing = () => {
       console.error('Erro ao imprimir comanda:', error);
       toast({
         title: "Erro na impressão",
-        description: "Comanda criada, mas não foi possível imprimir",
+        description: `Erro ao imprimir: ${error instanceof Error ? error.message : "Desconhecido"}`,
         variant: "destructive",
       });
     } finally {

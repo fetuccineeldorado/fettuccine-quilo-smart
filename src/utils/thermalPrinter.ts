@@ -563,10 +563,8 @@ export class ThermalPrinter {
   // Impressão direta de comanda com dados reais
   static async printOrderDirect(order: any, customerName: string, weight: number, foodTotal: number, selectedExtraItems: any[], extraItemsTotal: number): Promise<boolean> {
     try {
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) return false;
-
-      console.log('Imprimindo comanda direta:', {
+      console.log('=== INICIANDO IMPRESSÃO DE COMANDA ===');
+      console.log('Dados recebidos:', {
         order,
         customerName,
         weight,
@@ -575,45 +573,95 @@ export class ThermalPrinter {
         extraItemsTotal
       });
 
-      // Gerar HTML com dados reais
-      const extraItemsHTML = selectedExtraItems.length > 0 ? `
+      // Validar dados essenciais
+      if (!order || !order.order_number) {
+        console.error('Erro: Dados da comanda inválidos');
+        return false;
+      }
+
+      if (!customerName || customerName.trim() === '') {
+        console.error('Erro: Nome do cliente não fornecido');
+        return false;
+      }
+
+      if (!weight || weight <= 0) {
+        console.error('Erro: Peso inválido');
+        return false;
+      }
+
+      if (!foodTotal || foodTotal <= 0) {
+        console.error('Erro: Total da comida inválido');
+        return false;
+      }
+
+      // Verificar se selectedExtraItems é um array válido
+      const validExtraItems = Array.isArray(selectedExtraItems) ? selectedExtraItems : [];
+      console.log('Itens extra válidos:', validExtraItems);
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        console.error('Erro: Não foi possível abrir janela de impressão');
+        return false;
+      }
+
+      // Gerar HTML com dados reais e validação
+      const extraItemsHTML = validExtraItems.length > 0 ? `
         <div>
           <div class="bold">ITENS EXTRA:</div>
           <div class="separator"></div>
-          ${selectedExtraItems.map(item => `
-            <div>${item.quantity}x ${item.name}</div>
-            <div>R$ ${item.price.toFixed(2)} x ${item.quantity} = R$ ${(item.price * item.quantity).toFixed(2)}</div>
-          `).join('')}
+          ${validExtraItems.map(item => {
+            if (!item || !item.name || !item.quantity || !item.price) {
+              console.warn('Item extra inválido ignorado:', item);
+              return '';
+            }
+            return `
+              <div>${item.quantity}x ${item.name}</div>
+              <div>R$ ${Number(item.price).toFixed(2)} x ${item.quantity} = R$ ${(Number(item.price) * item.quantity).toFixed(2)}</div>
+            `;
+          }).filter(html => html !== '').join('')}
           <div class="separator"></div>
         </div>
       ` : '';
+
+      // Calcular preço por kg com validação
+      const pricePerKg = weight > 0 ? (foodTotal / weight) : 0;
+      console.log('Preço por kg calculado:', pricePerKg);
 
       const htmlContent = `
         <html>
           <head>
             <title>Comanda #${order.order_number}</title>
+            <meta charset="UTF-8">
             <style>
+              @media print {
+                body { margin: 0; }
+                .no-print { display: none; }
+              }
               body { 
                 font-family: 'Courier New', monospace; 
                 font-size: 12px; 
                 max-width: 300px; 
                 margin: 0 auto; 
                 padding: 10px;
+                line-height: 1.2;
               }
               .center { text-align: center; }
               .bold { font-weight: bold; }
               .separator { border-bottom: 1px dashed #000; margin: 5px 0; }
+              .large { font-size: 16px; }
+              .medium { font-size: 14px; }
+              .small { font-size: 10px; }
             </style>
           </head>
           <body>
             <div class="center">
-              <div class="bold" style="font-size: 18px;">FETTUCCINE ELDORADO</div>
-              <div>Sistema de Pesagem por Quilo</div>
+              <div class="bold large">FETTUCCINE ELDORADO</div>
+              <div class="medium">Sistema de Pesagem por Quilo</div>
               <div class="separator"></div>
             </div>
             
             <div class="center">
-              <div class="bold" style="font-size: 16px;">COMANDA #${order.order_number}</div>
+              <div class="bold large">COMANDA #${order.order_number}</div>
               <div>Cliente: ${customerName}</div>
               <div>Data: ${new Date().toLocaleString('pt-BR')}</div>
               <div class="separator"></div>
@@ -622,22 +670,22 @@ export class ThermalPrinter {
             <div>
               <div class="bold">ITENS DA COMANDA:</div>
               <div class="separator"></div>
-              <div>Comida por quilo - ${weight}kg</div>
-              <div>Peso: ${weight} kg</div>
-              <div>Preço/kg: R$ ${(foodTotal / weight).toFixed(2)}</div>
-              <div class="bold">Subtotal: R$ ${foodTotal.toFixed(2)}</div>
+              <div>Comida por quilo - ${Number(weight).toFixed(3)}kg</div>
+              <div>Peso: ${Number(weight).toFixed(3)} kg</div>
+              <div>Preço/kg: R$ ${Number(pricePerKg).toFixed(2)}</div>
+              <div class="bold">Subtotal: R$ ${Number(foodTotal).toFixed(2)}</div>
               <div class="separator"></div>
             </div>
             
             ${extraItemsHTML}
             
             <div class="center">
-              <div class="bold" style="font-size: 16px;">RESUMO:</div>
+              <div class="bold large">RESUMO:</div>
               <div class="separator"></div>
-              <div>Comida: R$ ${foodTotal.toFixed(2)}</div>
-              ${extraItemsTotal > 0 ? `<div>Itens Extra: R$ ${extraItemsTotal.toFixed(2)}</div>` : ''}
+              <div>Comida: R$ ${Number(foodTotal).toFixed(2)}</div>
+              ${Number(extraItemsTotal) > 0 ? `<div>Itens Extra: R$ ${Number(extraItemsTotal).toFixed(2)}</div>` : ''}
               <div class="separator"></div>
-              <div class="bold" style="font-size: 18px;">TOTAL: R$ ${(foodTotal + extraItemsTotal).toFixed(2)}</div>
+              <div class="bold large">TOTAL: R$ ${Number(foodTotal + extraItemsTotal).toFixed(2)}</div>
               <div class="separator"></div>
             </div>
             
@@ -649,14 +697,28 @@ export class ThermalPrinter {
         </html>
       `;
 
+      console.log('HTML gerado para impressão');
+      
       printWindow.document.write(htmlContent);
       printWindow.document.close();
       printWindow.focus();
       
+      // Aguardar carregamento e imprimir
       setTimeout(() => {
-        printWindow.print();
-        setTimeout(() => printWindow.close(), 1000);
-      }, 500);
+        try {
+          printWindow.print();
+          console.log('Comando de impressão enviado');
+          
+          // Fechar janela após impressão
+          setTimeout(() => {
+            printWindow.close();
+            console.log('Janela de impressão fechada');
+          }, 2000);
+        } catch (printError) {
+          console.error('Erro ao imprimir:', printError);
+          printWindow.close();
+        }
+      }, 1000);
 
       return true;
     } catch (error) {
@@ -667,57 +729,143 @@ export class ThermalPrinter {
 
   // Testar impressora
   static async testPrinter(): Promise<boolean> {
-    const testReceipt = `
-${this.CENTER}${this.BOLD}${this.EXTRA_LARGE}TESTE DE IMPRESSORA${this.NORMAL}
-${this.MEDIUM}================================
-${this.SMALL}Data: ${new Date().toLocaleString('pt-BR')}
-Status: OK
-================================
-${this.FEED}${this.FEED}${this.CUT}
-    `;
+    try {
+      console.log('=== TESTE DE IMPRESSORA ===');
+      
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        console.error('Erro: Não foi possível abrir janela de teste');
+        return false;
+      }
 
-    return await this.printReceipt(testReceipt);
+      const testContent = `
+        <html>
+          <head>
+            <title>Teste de Impressora</title>
+            <meta charset="UTF-8">
+            <style>
+              @media print {
+                body { margin: 0; }
+              }
+              body { 
+                font-family: 'Courier New', monospace; 
+                font-size: 12px; 
+                max-width: 300px; 
+                margin: 0 auto; 
+                padding: 10px;
+                text-align: center;
+              }
+              .bold { font-weight: bold; }
+              .large { font-size: 18px; }
+              .separator { border-bottom: 1px dashed #000; margin: 5px 0; }
+            </style>
+          </head>
+          <body>
+            <div class="bold large">TESTE DE IMPRESSORA</div>
+            <div class="separator"></div>
+            <div>Data: ${new Date().toLocaleString('pt-BR')}</div>
+            <div>Status: OK</div>
+            <div class="separator"></div>
+            <div>Impressora funcionando corretamente!</div>
+          </body>
+        </html>
+      `;
+
+      printWindow.document.write(testContent);
+      printWindow.document.close();
+      printWindow.focus();
+      
+      setTimeout(() => {
+        printWindow.print();
+        setTimeout(() => printWindow.close(), 2000);
+      }, 500);
+
+      console.log('Teste de impressora executado');
+      return true;
+    } catch (error) {
+      console.error('Erro no teste de impressora:', error);
+      return false;
+    }
   }
 
   // Testar impressão com itens extra
   static async testPrinterWithItems(): Promise<boolean> {
-    const testOrderData: OrderData = {
-      order_number: 999,
-      customer_name: "Cliente Teste",
-      total_weight: 0.500,
-      food_total: 27.45,
-      extra_items_total: 25.00,
-      total_amount: 52.45,
-      created_at: new Date().toISOString(),
-      items: [{
-        description: "Comida por quilo - 0.500kg",
-        quantity: 0.500,
-        unit_price: 54.90,
-        total_price: 27.45,
-      }],
-      extra_items: [
+    try {
+      console.log('=== TESTE DE IMPRESSÃO COM ITENS EXTRA ===');
+      
+      const testOrder = {
+        order_number: 999,
+        customer_name: "Cliente Teste",
+        total_weight: 0.500,
+        food_total: 27.45,
+        extra_items_total: 25.00,
+        total_amount: 52.45,
+        created_at: new Date().toISOString(),
+      };
+
+      const testExtraItems = [
         {
           name: "Coca lata",
           quantity: 1,
-          unit_price: 7.00,
-          total_price: 7.00,
+          price: 7.00,
         },
         {
           name: "Coca 600ml",
           quantity: 2,
-          unit_price: 9.00,
-          total_price: 18.00,
+          price: 9.00,
         }
-      ]
-    };
+      ];
 
-    console.log('Dados de teste para impressão:', testOrderData);
-    console.log('Itens extra no teste:', testOrderData.extra_items);
-    console.log('Quantidade de itens extra:', testOrderData.extra_items.length);
+      console.log('Dados de teste:', { testOrder, testExtraItems });
 
-    const testReceipt = this.generateReceipt(testOrderData);
-    console.log('Cupom gerado:', testReceipt);
+      const success = await this.printOrderDirect(
+        testOrder,
+        testOrder.customer_name,
+        testOrder.total_weight,
+        testOrder.food_total,
+        testExtraItems,
+        testOrder.extra_items_total
+      );
+
+      console.log('Resultado do teste:', success);
+      return success;
+    } catch (error) {
+      console.error('Erro no teste com itens extra:', error);
+      return false;
+    }
+  }
+
+  // Debug: Verificar dados antes da impressão
+  static debugPrintData(order: any, customerName: string, weight: number, foodTotal: number, selectedExtraItems: any[], extraItemsTotal: number): void {
+    console.log('=== DEBUG DE DADOS DE IMPRESSÃO ===');
+    console.log('Order:', order);
+    console.log('Customer Name:', customerName);
+    console.log('Weight:', weight);
+    console.log('Food Total:', foodTotal);
+    console.log('Selected Extra Items:', selectedExtraItems);
+    console.log('Extra Items Total:', extraItemsTotal);
     
-    return await this.printReceipt(testReceipt);
+    // Validações
+    console.log('=== VALIDAÇÕES ===');
+    console.log('Order válido:', !!(order && order.order_number));
+    console.log('Customer Name válido:', !!(customerName && customerName.trim()));
+    console.log('Weight válido:', !!(weight && weight > 0));
+    console.log('Food Total válido:', !!(foodTotal && foodTotal > 0));
+    console.log('Selected Extra Items é array:', Array.isArray(selectedExtraItems));
+    console.log('Quantidade de itens extra:', selectedExtraItems?.length || 0);
+    
+    // Verificar cada item extra
+    if (Array.isArray(selectedExtraItems)) {
+      selectedExtraItems.forEach((item, index) => {
+        console.log(`Item extra ${index}:`, {
+          name: item?.name,
+          quantity: item?.quantity,
+          price: item?.price,
+          válido: !!(item?.name && item?.quantity && item?.price)
+        });
+      });
+    }
+    
+    console.log('=== FIM DEBUG ===');
   }
 }
