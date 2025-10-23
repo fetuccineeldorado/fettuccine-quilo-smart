@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/DashboardLayout";
 import ExtraItemsSelector from "@/components/ExtraItemsSelector";
+import CustomerSearch from "@/components/CustomerSearch";
 import { ThermalPrinter, OrderData } from "@/utils/thermalPrinter";
 import { AlertCircle, Utensils, Printer } from "lucide-react";
 
@@ -19,6 +20,15 @@ const Weighing = () => {
   const [pricePerKg, setPricePerKg] = useState<number>(54.90);
   const [loading, setLoading] = useState(false);
   const [customerName, setCustomerName] = useState<string>("");
+  const [selectedCustomer, setSelectedCustomer] = useState<{
+    id: string;
+    name: string;
+    email: string;
+    phone: string;
+    tier: 'bronze' | 'silver' | 'gold' | 'platinum';
+    total_orders: number;
+    total_spent: number;
+  } | null>(null);
   const [selectedExtraItems, setSelectedExtraItems] = useState<Array<{
     id: string;
     name: string;
@@ -61,6 +71,15 @@ const Weighing = () => {
     fetchSettings();
   }, [fetchSettings]);
 
+  const handleCustomerSelect = (customer: any) => {
+    setSelectedCustomer(customer);
+    if (customer) {
+      setCustomerName(customer.name);
+    } else {
+      setCustomerName("");
+    }
+  };
+
 
   const calculateFoodTotal = () => {
     const weightNum = Number(weight);
@@ -80,10 +99,12 @@ const Weighing = () => {
 
 
   const handleCreateOrder = async () => {
-    if (!customerName.trim()) {
+    const finalCustomerName = selectedCustomer ? selectedCustomer.name : customerName.trim();
+    
+    if (!finalCustomerName) {
       toast({
         title: "Nome do cliente obrigatório",
-        description: "Por favor, insira o nome do cliente",
+        description: "Por favor, selecione um cliente ou digite o nome",
         variant: "destructive",
       });
       return;
@@ -112,7 +133,7 @@ const Weighing = () => {
         .from("orders")
         .insert({
           status: "open",
-          customer_name: customerName.trim(),
+          customer_name: finalCustomerName,
           total_weight: weightNum,
           food_total: foodTotal,
           total_amount: total,
@@ -149,7 +170,7 @@ const Weighing = () => {
 
       toast({
         title: "Comanda criada!",
-        description: `Comanda #${order.order_number} - ${customerName} - R$ ${total.toFixed(2)}`,
+        description: `Comanda #${order.order_number} - ${finalCustomerName} - R$ ${total.toFixed(2)}`,
       });
 
       // Imprimir comanda
@@ -158,6 +179,7 @@ const Weighing = () => {
       // Reset form
       setCustomerName("");
       setWeight("");
+      setSelectedCustomer(null);
       setSelectedExtraItems([]);
       
       // Navigate to orders or stay for next weighing
@@ -183,7 +205,7 @@ const Weighing = () => {
       console.log('Total de itens extra:', extraItemsTotal);
 
       // Usar impressão direta com HTML
-      const success = await ThermalPrinter.printOrderDirect(order, customerName, weight, foodTotal, selectedExtraItems, extraItemsTotal);
+      const success = await ThermalPrinter.printOrderDirect(order, finalCustomerName, weight, foodTotal, selectedExtraItems, extraItemsTotal);
 
       if (success) {
         toast({
@@ -211,15 +233,15 @@ const Weighing = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-8 max-w-6xl mx-auto space-y-8">
-        <div className="flex justify-between items-center">
+      <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-6 lg:space-y-8">
+        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
           <div>
-            <h1 className="text-4xl font-bold mb-2">Pesagem</h1>
-            <p className="text-muted-foreground text-lg">
+            <h1 className="text-2xl lg:text-4xl font-bold mb-2">Pesagem</h1>
+            <p className="text-muted-foreground text-base lg:text-lg">
               Sistema de pesagem manual por quilo
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               onClick={async () => {
                 try {
@@ -397,7 +419,7 @@ ${ThermalPrinter.FEED}${ThermalPrinter.FEED}${ThermalPrinter.CUT}
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Manual Weighing Card */}
           <Card className="shadow-strong">
             <CardHeader>
@@ -423,17 +445,11 @@ ${ThermalPrinter.FEED}${ThermalPrinter.FEED}${ThermalPrinter.CUT}
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="customer-name">Nome do Cliente *</Label>
-                <Input
-                  id="customer-name"
-                  type="text"
-                  placeholder="Digite o nome do cliente"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  required
-                />
-              </div>
+              <CustomerSearch
+                onCustomerSelect={handleCustomerSelect}
+                selectedCustomer={selectedCustomer}
+                placeholder="Buscar cliente cadastrado ou digite nome..."
+              />
             </CardContent>
           </Card>
 
@@ -529,7 +545,7 @@ ${ThermalPrinter.FEED}${ThermalPrinter.FEED}${ThermalPrinter.CUT}
 
               <Button
                 onClick={handleCreateOrder}
-                disabled={!weight || Number(weight) <= 0 || !customerName.trim() || loading || printing}
+                disabled={!weight || Number(weight) <= 0 || (!selectedCustomer && !customerName.trim()) || loading || printing}
                 size="lg"
                 className="w-full"
               >

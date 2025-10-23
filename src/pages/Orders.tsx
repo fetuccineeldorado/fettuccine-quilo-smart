@@ -133,10 +133,10 @@ const Orders = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-8 space-y-8">
+      <div className="p-4 lg:p-8 space-y-6 lg:space-y-8">
         <div>
-          <h1 className="text-4xl font-bold mb-2">Comandas</h1>
-          <p className="text-muted-foreground text-lg">
+          <h1 className="text-2xl lg:text-4xl font-bold mb-2">Comandas</h1>
+          <p className="text-muted-foreground text-base lg:text-lg">
             Gestão de todas as comandas do sistema
           </p>
         </div>
@@ -154,7 +154,7 @@ const Orders = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6">
             {orders.map((order) => (
               <Card key={order.id} className="shadow-soft hover:shadow-lg transition-smooth">
                 <CardHeader>
@@ -163,7 +163,7 @@ const Orders = () => {
                       <span className="text-2xl font-bold">#{order.order_number}</span>
                       {getStatusBadge(order.status)}
                     </CardTitle>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Button 
                         variant="outline" 
                         size="sm"
@@ -206,7 +206,7 @@ const Orders = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
                     <div>
                       <p className="text-sm text-muted-foreground mb-1">Peso Total</p>
                       <p className="text-lg font-semibold">

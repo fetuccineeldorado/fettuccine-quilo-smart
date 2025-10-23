@@ -144,15 +144,15 @@ const Cashier = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-8 max-w-4xl mx-auto space-y-8">
+      <div className="p-4 lg:p-8 max-w-4xl mx-auto space-y-6 lg:space-y-8">
         <div>
-          <h1 className="text-4xl font-bold mb-2">Caixa</h1>
-          <p className="text-muted-foreground text-lg">
+          <h1 className="text-2xl lg:text-4xl font-bold mb-2">Caixa</h1>
+          <p className="text-muted-foreground text-base lg:text-lg">
             Fechamento de comandas e processamento de pagamentos
           </p>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Order Selection */}
           <Card className="shadow-strong">
             <CardHeader>
