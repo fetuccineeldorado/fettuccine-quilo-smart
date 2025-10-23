@@ -152,36 +152,45 @@ export class ThermalPrinter {
   // Enviar para impressora
   static async printReceipt(receipt: string): Promise<boolean> {
     try {
-      // Verificar se a API de impressão está disponível
-      if (!navigator.serial) {
-        console.warn('Web Serial API não disponível. Usando fallback para impressão.');
+      // Verificar se a Web USB API está disponível
+      if (!navigator.usb) {
+        console.warn('Web USB API não disponível. Usando fallback para impressão.');
         return this.fallbackPrint(receipt);
       }
 
-      // Solicitar acesso à impressora
-      const port = await navigator.serial.requestPort({
+      // Solicitar acesso à impressora USB
+      const device = await navigator.usb.requestDevice({
         filters: [
-          { usbVendorId: 0x04b8 }, // Epson
-          { usbVendorId: 0x04a9 }, // Canon
-          { usbVendorId: 0x03f0 }, // HP
+          { vendorId: 0x04b8 }, // Epson
+          { vendorId: 0x04a9 }, // Canon
+          { vendorId: 0x03f0 }, // HP
+          { vendorId: 0x04e8 }, // Samsung
+          { vendorId: 0x04f9 }, // Brother
         ]
       });
 
-      // Abrir conexão
-      await port.open({ baudRate: 9600 });
+      // Abrir conexão USB
+      await device.open();
+      await device.selectConfiguration(1);
+      await device.claimInterface(0);
 
-      // Enviar dados
-      const writer = port.writable.getWriter();
+      // Enviar dados via USB
       const encoder = new TextEncoder();
-      await writer.write(encoder.encode(receipt));
-      writer.releaseLock();
+      const data = encoder.encode(receipt);
+      
+      // Enviar em chunks se necessário
+      const chunkSize = 64;
+      for (let i = 0; i < data.length; i += chunkSize) {
+        const chunk = data.slice(i, i + chunkSize);
+        await device.transferOut(1, chunk);
+      }
 
       // Fechar conexão
-      await port.close();
+      await device.close();
 
       return true;
     } catch (error) {
-      console.error('Erro ao imprimir:', error);
+      console.error('Erro ao imprimir via USB:', error);
       return this.fallbackPrint(receipt);
     }
   }
@@ -230,6 +239,32 @@ export class ThermalPrinter {
     } catch (error) {
       console.error('Erro no fallback de impressão:', error);
       return false;
+    }
+  }
+
+  // Detectar impressoras USB disponíveis
+  static async detectUSBPrinters(): Promise<USBDevice[]> {
+    try {
+      if (!navigator.usb) {
+        console.warn('Web USB API não disponível');
+        return [];
+      }
+
+      const devices = await navigator.usb.getDevices();
+      return devices.filter(device => {
+        // Filtrar dispositivos que podem ser impressoras
+        const vendorId = device.vendorId;
+        return [
+          0x04b8, // Epson
+          0x04a9, // Canon
+          0x03f0, // HP
+          0x04e8, // Samsung
+          0x04f9, // Brother
+        ].includes(vendorId);
+      });
+    } catch (error) {
+      console.error('Erro ao detectar impressoras USB:', error);
+      return [];
     }
   }
 

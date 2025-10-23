@@ -237,40 +237,73 @@ const Weighing = () => {
               Sistema de pesagem manual por quilo
             </p>
           </div>
-          <Button
-            onClick={async () => {
-              setPrinting(true);
-              try {
-                const success = await ThermalPrinter.testPrinter();
-                if (success) {
+          <div className="flex gap-2">
+            <Button
+              onClick={async () => {
+                try {
+                  const printers = await ThermalPrinter.detectUSBPrinters();
+                  if (printers.length > 0) {
+                    toast({
+                      title: "Impressoras USB detectadas",
+                      description: `${printers.length} impressora(s) USB encontrada(s)`,
+                    });
+                  } else {
+                    toast({
+                      title: "Nenhuma impressora USB",
+                      description: "Nenhuma impressora USB detectada",
+                      variant: "destructive",
+                    });
+                  }
+                } catch (error) {
                   toast({
-                    title: "Teste de impressão",
-                    description: "Cupom de teste enviado para impressora",
-                  });
-                } else {
-                  toast({
-                    title: "Erro no teste",
-                    description: "Não foi possível imprimir teste",
+                    title: "Erro na detecção",
+                    description: "Erro ao detectar impressoras USB",
                     variant: "destructive",
                   });
                 }
-              } catch (error) {
-                toast({
-                  title: "Erro no teste",
-                  description: "Erro ao testar impressora",
-                  variant: "destructive",
-                });
-              } finally {
-                setPrinting(false);
-              }
-            }}
-            variant="outline"
-            disabled={printing}
-            className="flex items-center gap-2"
-          >
-            <Printer className="h-4 w-4" />
-            {printing ? "Testando..." : "Testar Impressora"}
-          </Button>
+              }}
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2"
+            >
+              <Printer className="h-4 w-4" />
+              Detectar USB
+            </Button>
+            <Button
+              onClick={async () => {
+                setPrinting(true);
+                try {
+                  const success = await ThermalPrinter.testPrinter();
+                  if (success) {
+                    toast({
+                      title: "Teste de impressão",
+                      description: "Cupom de teste enviado para impressora",
+                    });
+                  } else {
+                    toast({
+                      title: "Erro no teste",
+                      description: "Não foi possível imprimir teste",
+                      variant: "destructive",
+                    });
+                  }
+                } catch (error) {
+                  toast({
+                    title: "Erro no teste",
+                    description: "Erro ao testar impressora",
+                    variant: "destructive",
+                  });
+                } finally {
+                  setPrinting(false);
+                }
+              }}
+              variant="outline"
+              disabled={printing}
+              className="flex items-center gap-2"
+            >
+              <Printer className="h-4 w-4" />
+              {printing ? "Testando..." : "Testar Impressora"}
+            </Button>
+          </div>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
