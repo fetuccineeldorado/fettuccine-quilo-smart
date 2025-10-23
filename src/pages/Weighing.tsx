@@ -178,6 +178,10 @@ const Weighing = () => {
   const printOrderReceipt = async (order: any, weight: number, foodTotal: number, extraItemsTotal: number) => {
     setPrinting(true);
     try {
+      // Debug: verificar itens extra selecionados
+      console.log('Itens extra selecionados:', selectedExtraItems);
+      console.log('Total de itens extra:', extraItemsTotal);
+
       const orderData: OrderData = {
         order_number: order.order_number,
         customer_name: customerName,
@@ -199,6 +203,9 @@ const Weighing = () => {
           total_price: item.price * item.quantity,
         }))
       };
+
+      // Debug: verificar dados da comanda
+      console.log('Dados da comanda para impressão:', orderData);
 
       const receipt = ThermalPrinter.generateReceipt(orderData);
       const success = await ThermalPrinter.printReceipt(receipt);

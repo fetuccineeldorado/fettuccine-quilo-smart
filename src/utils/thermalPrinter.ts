@@ -93,6 +93,9 @@ export class ThermalPrinter {
     }
 
     // Itens extra
+    console.log('Processando itens extra:', orderData.extra_items);
+    console.log('Quantidade de itens extra:', orderData.extra_items.length);
+    
     if (orderData.extra_items.length > 0) {
       receipt += this.BOLD;
       receipt += this.MEDIUM;
@@ -100,6 +103,7 @@ export class ThermalPrinter {
       receipt += this.NORMAL;
       receipt += this.SMALL;
       orderData.extra_items.forEach(item => {
+        console.log('Processando item extra:', item);
         receipt += this.MEDIUM;
         receipt += `${item.quantity}x ${item.name}\n`;
         receipt += this.SMALL;
@@ -109,6 +113,8 @@ export class ThermalPrinter {
         receipt += this.NORMAL;
       });
       receipt += '--------------------------------\n';
+    } else {
+      console.log('Nenhum item extra encontrado para impressão');
     }
 
     // Totais
