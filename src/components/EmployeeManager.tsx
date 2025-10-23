@@ -549,7 +549,7 @@ const EmployeeManager = () => {
                     <p className="text-sm text-muted-foreground">{employee.email}</p>
                   </div>
                   <div className="flex items-center gap-1">
-                    <Badge variant={statusInfo.color as any} className="text-xs">
+                    <Badge variant={statusInfo.color as "default" | "secondary"} className="text-xs">
                       <StatusIcon className="h-3 w-3 mr-1" />
                       {statusInfo.label}
                     </Badge>

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import DashboardLayout from "@/components/DashboardLayout";
 import SimpleInventoryManager from "@/components/SimpleInventoryManager";
+import AdvancedInventoryManager from "@/components/AdvancedInventoryManager";
 import { Package, ArrowRightLeft, AlertTriangle, BarChart3 } from "lucide-react";
 
 type TabType = 'products' | 'movements' | 'alerts' | 'reports';
@@ -41,7 +42,7 @@ const Inventory = () => {
   const renderTabContent = () => {
     switch (activeTab) {
       case 'products':
-        return <SimpleInventoryManager />;
+        return <AdvancedInventoryManager />;
       case 'movements':
         return (
           <Card>
@@ -82,7 +83,7 @@ const Inventory = () => {
           </Card>
         );
       default:
-        return <SimpleInventoryManager />;
+        return <AdvancedInventoryManager />;
     }
   };
 

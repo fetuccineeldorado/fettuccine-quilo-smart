@@ -12,6 +12,7 @@ import Cashier from "./pages/Cashier";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import Customers from "./pages/Customers";
+import Employees from "./pages/Employees";
 import EditOrder from "./pages/EditOrder";
 import OrderDetails from "./pages/OrderDetails";
 import CashManagement from "./pages/CashManagement";
@@ -44,6 +45,7 @@ const App = () => (
             <Route path="/dashboard/reports" element={<Reports />} />
             <Route path="/dashboard/settings" element={<Settings />} />
             <Route path="/dashboard/customers" element={<Customers />} />
+            <Route path="/dashboard/employees" element={<Employees />} />
             <Route path="/dashboard/edit-order/:orderId" element={<EditOrder />} />
             <Route path="/edit-order/:orderId" element={<EditOrder />} />
             <Route path="/dashboard/order-details/:orderId" element={<OrderDetails />} />

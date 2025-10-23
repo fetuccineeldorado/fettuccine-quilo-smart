@@ -31,6 +31,7 @@ export const usePWA = () => {
     const checkInstalled = () => {
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
       const isInstalled = isStandalone || 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (window.navigator as any).standalone === true || // iOS Safari
         document.referrer.includes('android-app://'); // Android
 

@@ -73,7 +73,15 @@ const Weighing = () => {
     fetchSettings();
   }, [fetchSettings]);
 
-  const handleCustomerSelect = (customer: any) => {
+  const handleCustomerSelect = (customer: {
+    id: string;
+    name: string;
+    email: string;
+    phone: string;
+    tier: 'bronze' | 'silver' | 'gold' | 'platinum';
+    total_orders: number;
+    total_spent: number;
+  } | null) => {
     setSelectedCustomer(customer);
     if (customer) {
       setCustomerName(customer.name);
@@ -218,7 +226,7 @@ const Weighing = () => {
     }
   };
 
-  const printOrderReceipt = async (order: any, customerName: string, weight: number, foodTotal: number, extraItemsTotal: number) => {
+  const printOrderReceipt = async (order: OrderData, customerName: string, weight: number, foodTotal: number, extraItemsTotal: number) => {
     setPrinting(true);
     try {
       console.log('=== INICIANDO IMPRESSÃO DE COMANDA ===');

@@ -387,17 +387,27 @@ export class ThermalPrinter {
     let html = receipt;
     
     // Remover comandos de controle que não são necessários para HTML
+    // eslint-disable-next-line no-control-regex
     html = html.replace(/\x1B\x61\x01/g, ''); // CENTER - será aplicado via CSS
+    // eslint-disable-next-line no-control-regex
     html = html.replace(/\x1B\x61\x00/g, ''); // LEFT - será aplicado via CSS
+    // eslint-disable-next-line no-control-regex
     html = html.replace(/\x1B\x45\x01/g, '<strong>'); // BOLD
+    // eslint-disable-next-line no-control-regex
     html = html.replace(/\x1B\x45\x00/g, '</strong>'); // NORMAL
+    // eslint-disable-next-line no-control-regex
     html = html.replace(/\x1B\x21\x50/g, '<span class="extra-large">'); // EXTRA_LARGE
+    // eslint-disable-next-line no-control-regex
     html = html.replace(/\x1B\x21\x30/g, '<span class="large">'); // LARGE
+    // eslint-disable-next-line no-control-regex
     html = html.replace(/\x1B\x21\x20/g, '<span class="medium">'); // MEDIUM
+    // eslint-disable-next-line no-control-regex
     html = html.replace(/\x1B\x21\x00/g, '<span class="small">'); // SMALL
     
     // Remover comandos de feed e corte
+    // eslint-disable-next-line no-control-regex
     html = html.replace(/\x0A/g, '\n'); // LF
+    // eslint-disable-next-line no-control-regex
     html = html.replace(/\x1D\x56\x00/g, ''); // CUT
     
     // Converter quebras de linha
@@ -442,33 +452,6 @@ export class ThermalPrinter {
     }
   }
 
-  // Impressão direta via USB (método alternativo)
-  static async directUSBPrint(receipt: string): Promise<boolean> {
-    try {
-      // Criar um arquivo de impressão temporário
-      const encoder = new TextEncoder();
-      const data = encoder.encode(receipt);
-      const blob = new Blob([data], { type: 'text/plain' });
-      
-      // Criar URL do blob
-      const url = URL.createObjectURL(blob);
-      
-      // Tentar abrir em nova janela para impressão direta
-      const printWindow = window.open(url, '_blank');
-      if (printWindow) {
-        printWindow.focus();
-        printWindow.print();
-        printWindow.close();
-        URL.revokeObjectURL(url);
-        return true;
-      }
-      
-      return false;
-    } catch (error) {
-      console.error('Erro na impressão direta USB:', error);
-      return false;
-    }
-  }
 
   // Impressão forçada com HTML simples
   static async forcePrintWithItems(): Promise<boolean> {
@@ -561,7 +544,7 @@ export class ThermalPrinter {
   }
 
   // Impressão direta de comanda com dados reais
-  static async printOrderDirect(order: any, customerName: string, weight: number, foodTotal: number, selectedExtraItems: any[], extraItemsTotal: number): Promise<boolean> {
+  static async printOrderDirect(order: OrderData, customerName: string, weight: number, foodTotal: number, selectedExtraItems: ExtraItem[], extraItemsTotal: number): Promise<boolean> {
     try {
       console.log('=== INICIANDO IMPRESSÃO DE COMANDA ===');
       console.log('Dados recebidos:', {
@@ -836,7 +819,7 @@ export class ThermalPrinter {
   }
 
   // Debug: Verificar dados antes da impressão
-  static debugPrintData(order: any, customerName: string, weight: number, foodTotal: number, selectedExtraItems: any[], extraItemsTotal: number): void {
+  static debugPrintData(order: OrderData, customerName: string, weight: number, foodTotal: number, selectedExtraItems: ExtraItem[], extraItemsTotal: number): void {
     console.log('=== DEBUG DE DADOS DE IMPRESSÃO ===');
     console.log('Order:', order);
     console.log('Customer Name:', customerName);
