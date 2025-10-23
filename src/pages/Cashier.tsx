@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/DashboardLayout";
-import { CreditCard, DollarSign, Smartphone, Receipt } from "lucide-react";
+import { CreditCard, DollarSign, Smartphone, Receipt, Edit } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 interface Order {
   id: string;
@@ -20,6 +21,7 @@ interface Order {
 
 const Cashier = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<string>("");
@@ -35,7 +37,7 @@ const Cashier = () => {
       const { data, error } = await supabase
         .from("orders")
         .select("id, order_number, total_amount, total_weight, status, customer_name")
-        .eq("status", "open")
+        .in("status", ["open"])
         .order("order_number", { ascending: false });
 
       if (error) {
@@ -204,6 +206,17 @@ const Cashier = () => {
                     <span className="font-bold text-primary">
                       R$ {Number(selectedOrder.total_amount).toFixed(2)}
                     </span>
+                  </div>
+                  <div className="pt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/dashboard/edit-order/${selectedOrder.id}`)}
+                      className="w-full"
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Editar Comanda
+                    </Button>
                   </div>
                 </div>
               )}

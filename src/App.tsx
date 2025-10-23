@@ -12,6 +12,8 @@ import Cashier from "./pages/Cashier";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import Customers from "./pages/Customers";
+import EditOrder from "./pages/EditOrder";
+import OrderDetails from "./pages/OrderDetails";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +40,10 @@ const App = () => (
             <Route path="/dashboard/reports" element={<Reports />} />
             <Route path="/dashboard/settings" element={<Settings />} />
             <Route path="/dashboard/customers" element={<Customers />} />
+            <Route path="/dashboard/edit-order/:orderId" element={<EditOrder />} />
+            <Route path="/edit-order/:orderId" element={<EditOrder />} />
+            <Route path="/dashboard/order-details/:orderId" element={<OrderDetails />} />
+            <Route path="/order-details/:orderId" element={<OrderDetails />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -5,9 +5,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/DashboardLayout";
-import { FileText, Eye, XCircle, Clock } from "lucide-react";
+import { FileText, Eye, XCircle, Clock, Edit } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useNavigate } from "react-router-dom";
 
 interface Order {
   id: string;
@@ -22,6 +23,7 @@ interface Order {
 
 const Orders = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -104,8 +106,9 @@ const Orders = () => {
   };
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, { variant: "default" | "outline" | "destructive"; label: string }> = {
+    const variants: Record<string, { variant: "default" | "outline" | "destructive" | "secondary"; label: string }> = {
       open: { variant: "default", label: "Aberta" },
+      pending: { variant: "secondary", label: "Sendo Editada" },
       closed: { variant: "outline", label: "Fechada" },
       cancelled: { variant: "destructive", label: "Cancelada" },
     };
@@ -161,18 +164,42 @@ const Orders = () => {
                       {getStatusBadge(order.status)}
                     </CardTitle>
                     <div className="flex gap-2">
-                      <Button variant="outline" size="sm">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => navigate(`/dashboard/order-details/${order.id}`)}
+                      >
                         <Eye className="h-4 w-4 mr-2" />
                         Ver Detalhes
                       </Button>
                       {order.status === "open" && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => navigate(`/dashboard/edit-order/${order.id}`)}
+                          >
+                            <Edit className="h-4 w-4 mr-2" />
+                            Editar
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleCancelOrder(order.id)}
+                          >
+                            <XCircle className="h-4 w-4 mr-2" />
+                            Cancelar
+                          </Button>
+                        </>
+                      )}
+                      {order.status === "pending" && (
                         <Button
-                          variant="destructive"
+                          variant="outline"
                           size="sm"
-                          onClick={() => handleCancelOrder(order.id)}
+                          disabled
                         >
-                          <XCircle className="h-4 w-4 mr-2" />
-                          Cancelar
+                          <Edit className="h-4 w-4 mr-2" />
+                          Sendo Editada
                         </Button>
                       )}
                     </div>
