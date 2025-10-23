@@ -15,6 +15,7 @@ import Customers from "./pages/Customers";
 import EditOrder from "./pages/EditOrder";
 import OrderDetails from "./pages/OrderDetails";
 import CashManagement from "./pages/CashManagement";
+import Inventory from "./pages/Inventory";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +40,7 @@ const App = () => (
             <Route path="/dashboard/orders" element={<Orders />} />
             <Route path="/dashboard/cashier" element={<Cashier />} />
             <Route path="/dashboard/cash-management" element={<CashManagement />} />
+            <Route path="/dashboard/inventory" element={<Inventory />} />
             <Route path="/dashboard/reports" element={<Reports />} />
             <Route path="/dashboard/settings" element={<Settings />} />
             <Route path="/dashboard/customers" element={<Customers />} />

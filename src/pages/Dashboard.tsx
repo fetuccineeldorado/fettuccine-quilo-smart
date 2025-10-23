@@ -1,8 +1,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ThemeDemo } from "@/components/theme-demo";
 import PWAInstaller from "@/components/PWAInstaller";
+import { useSimpleStockAlerts } from "@/hooks/useSimpleStockAlerts";
 import { 
   DollarSign, 
   Users, 
@@ -12,7 +15,9 @@ import {
   Clock,
   Package,
   UserPlus,
-  BarChart3
+  BarChart3,
+  AlertTriangle,
+  CheckCircle
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 
@@ -24,6 +29,8 @@ const Dashboard = () => {
     avgTicket: 0,
     totalWeight: 0,
   });
+
+  const { alerts, loading: alertsLoading, hasNewAlerts, resolveAllAlerts } = useSimpleStockAlerts();
 
   const fetchStats = useCallback(async () => {
     try {
@@ -143,6 +150,57 @@ const Dashboard = () => {
             );
           })}
         </div>
+
+        {/* Stock Alerts */}
+        {alerts.length > 0 && (
+          <Card className="shadow-soft border-l-4 border-l-yellow-500">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                  Alertas de Estoque
+                  {hasNewAlerts && (
+                    <Badge variant="destructive" className="animate-pulse">
+                      Novo
+                    </Badge>
+                  )}
+                </CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={resolveAllAlerts}
+                  disabled={alertsLoading}
+                >
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Resolver Todos
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {alerts.slice(0, 3).map((alert) => (
+                  <div key={alert.id} className="flex items-center justify-between p-2 bg-yellow-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                      <span className="font-medium">{alert.name}</span>
+                      <Badge variant="outline" className="text-xs">
+                        {alert.current_stock <= 0 ? 'Sem estoque' : 'Estoque baixo'}
+                      </Badge>
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      {alert.current_stock} {alert.unit} (mín: {alert.min_stock})
+                    </span>
+                  </div>
+                ))}
+                {alerts.length > 3 && (
+                  <p className="text-sm text-muted-foreground text-center">
+                    +{alerts.length - 3} alertas adicionais
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Quick Actions */}
         <Card className="shadow-soft">

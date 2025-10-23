@@ -12,6 +12,8 @@ import CustomerSearch from "@/components/CustomerSearch";
 import { ThermalPrinter, OrderData } from "@/utils/thermalPrinter";
 import { AlertCircle, Utensils, Printer } from "lucide-react";
 
+import { reduceProductStock, ensureProductExists } from "@/utils/inventoryUtils";
+
 
 const Weighing = () => {
   const navigate = useNavigate();
@@ -154,7 +156,7 @@ const Weighing = () => {
         total_price: foodTotal,
       });
 
-      // Create order items for extra items
+      // Create order items for extra items and reduce stock
       if (selectedExtraItems.length > 0) {
         const extraItemsData = selectedExtraItems.map(item => ({
           order_id: order.id,
@@ -165,6 +167,25 @@ const Weighing = () => {
         }));
 
         await supabase.from("order_extra_items").insert(extraItemsData);
+
+        // Reduce stock for extra items using localStorage
+        for (const item of selectedExtraItems) {
+          // Ensure product exists in inventory
+          const product = ensureProductExists(item.name, item.price);
+          
+          // Reduce stock
+          const success = reduceProductStock(
+            product.id, 
+            item.quantity, 
+            order.id, 
+            'order',
+            `Venda automática - Comanda #${order.order_number}`
+          );
+          
+          if (!success) {
+            console.warn(`Não foi possível reduzir estoque para ${item.name}`);
+          }
+        }
       }
 
 
