@@ -12,7 +12,7 @@ const Settings = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [settings, setSettings] = useState({
-    pricePerKg: "45.00",
+    pricePerKg: "59.90",
     minimumCharge: "5.00",
     maximumWeight: "2.00",
   });

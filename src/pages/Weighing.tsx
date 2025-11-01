@@ -19,7 +19,7 @@ const Weighing = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [weight, setWeight] = useState<string>("");
-  const [pricePerKg, setPricePerKg] = useState<number>(54.90);
+  const [pricePerKg, setPricePerKg] = useState<number>(59.90);
   const [loading, setLoading] = useState(false);
   const [customerName, setCustomerName] = useState<string>("");
   const [selectedCustomer, setSelectedCustomer] = useState<{

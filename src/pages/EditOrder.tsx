@@ -58,7 +58,7 @@ const EditOrder = () => {
     price: number;
     quantity: number;
   }>>([]);
-  const [pricePerKg, setPricePerKg] = useState<number>(45.00);
+  const [pricePerKg, setPricePerKg] = useState<number>(59.90);
 
   useEffect(() => {
     if (orderId) {
