@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/DashboardLayout";
 import ExtraItemsSelector from "@/components/ExtraItemsSelector";
 import CustomerSearch from "@/components/CustomerSearch";
 import { ThermalPrinter, OrderData } from "@/utils/thermalPrinter";
-import { AlertCircle, Utensils, Printer } from "lucide-react";
+import { AlertCircle, Utensils, Printer, Users } from "lucide-react";
 
 import { reduceProductStock, ensureProductExists } from "@/utils/inventoryUtils";
 
@@ -38,6 +40,15 @@ const Weighing = () => {
     quantity: number;
   }>>([]);
   const [printing, setPrinting] = useState(false);
+  const [addToExistingOrder, setAddToExistingOrder] = useState(false);
+  const [openOrders, setOpenOrders] = useState<Array<{
+    id: string;
+    order_number: number;
+    customer_name: string;
+    total_amount: number;
+    total_weight: number;
+  }>>([]);
+  const [selectedOrderId, setSelectedOrderId] = useState<string>("");
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -71,7 +82,97 @@ const Weighing = () => {
 
   useEffect(() => {
     fetchSettings();
+    fetchOpenOrders();
   }, [fetchSettings]);
+
+  const fetchOpenOrders = async () => {
+    try {
+      console.log('🔄 Buscando comandas abertas...');
+      
+      // Primeiro, tentar buscar todas as comandas para debug
+      const { data: allData, error: allError } = await supabase
+        .from("orders")
+        .select("id, order_number, customer_name, total_amount, total_weight, status")
+        .order("order_number", { ascending: false })
+        .limit(10);
+
+      if (allError) {
+        console.error('❌ Erro ao buscar todas as comandas:', allError);
+        toast({
+          title: "Erro ao carregar comandas",
+          description: allError.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log('📊 Total de comandas encontradas:', allData?.length || 0);
+      if (allData && allData.length > 0) {
+        console.log('📋 Status das comandas:', allData.map(o => ({ num: o.order_number, status: o.status })));
+      }
+
+      // Buscar comandas abertas - usar .eq() para status "open" primeiro (igual Cashier faz)
+      const { data: openData, error: openError } = await supabase
+        .from("orders")
+        .select("id, order_number, customer_name, total_amount, total_weight, status")
+        .eq("status", "open")
+        .order("order_number", { ascending: false });
+
+      if (openError) {
+        console.error('❌ Erro ao carregar comandas abertas (open):', openError);
+      } else {
+        console.log('✅ Comandas com status "open" encontradas:', openData?.length || 0);
+      }
+
+      // Buscar comandas pending separadamente
+      const { data: pendingData, error: pendingError } = await supabase
+        .from("orders")
+        .select("id, order_number, customer_name, total_amount, total_weight, status")
+        .eq("status", "pending")
+        .order("order_number", { ascending: false });
+
+      if (pendingError) {
+        console.error('❌ Erro ao carregar comandas abertas (pending):', pendingError);
+      } else {
+        console.log('✅ Comandas com status "pending" encontradas:', pendingData?.length || 0);
+      }
+
+      // Combinar resultados
+      const allOpenOrders = [
+        ...(openData || []),
+        ...(pendingData || [])
+      ];
+
+      // Remover duplicatas por ID
+      const uniqueOrders = Array.from(
+        new Map(allOpenOrders.map(order => [order.id, order])).values()
+      );
+
+      console.log('✅ Total de comandas abertas (open + pending):', uniqueOrders.length);
+      
+      if (uniqueOrders.length === 0) {
+        console.log('⚠️ Nenhuma comanda aberta encontrada');
+      }
+
+      setOpenOrders(uniqueOrders);
+      
+      if (openError && pendingError) {
+        toast({
+          title: "Erro ao carregar comandas",
+          description: "Não foi possível buscar comandas abertas",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error('💥 Erro geral ao carregar comandas abertas:', err);
+      toast({
+        title: "Erro ao carregar comandas",
+        description: "Erro desconhecido ao buscar comandas abertas",
+        variant: "destructive",
+      });
+      setOpenOrders([]);
+    }
+  };
 
   const handleCustomerSelect = (customer: {
     id: string;
@@ -111,7 +212,7 @@ const Weighing = () => {
   const handleCreateOrder = async () => {
     const finalCustomerName = selectedCustomer ? selectedCustomer.name : customerName.trim();
     
-    if (!finalCustomerName) {
+    if (!finalCustomerName && !addToExistingOrder) {
       toast({
         title: "Nome do cliente obrigatório",
         description: "Por favor, selecione um cliente ou digite o nome",
@@ -129,6 +230,16 @@ const Weighing = () => {
       return;
     }
 
+    // Se for adicionar a comanda existente, validar seleção
+    if (addToExistingOrder && !selectedOrderId) {
+      toast({
+        title: "Comanda não selecionada",
+        description: "Por favor, selecione uma comanda para adicionar os itens",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -138,86 +249,175 @@ const Weighing = () => {
       const extraItemsTotal = calculateExtraItemsTotal();
       const total = foodTotal + extraItemsTotal;
 
-      // Create new order
-      const { data: order, error } = await supabase
-        .from("orders")
-        .insert({
-          status: "open",
-          customer_name: finalCustomerName,
-          total_weight: weightNum,
-          food_total: foodTotal,
-          total_amount: total,
-          opened_by: session?.user?.id,
-        })
-        .select()
-        .single();
+      let order;
 
-      if (error) throw error;
+      if (addToExistingOrder && selectedOrderId) {
+        // Adicionar a comanda existente
+        const { data: existingOrder, error: fetchError } = await supabase
+          .from("orders")
+          .select("*")
+          .eq("id", selectedOrderId)
+          .single();
 
-      // Create order item for food
-      await supabase.from("order_items").insert({
-        order_id: order.id,
-        item_type: "food_weight",
-        description: `Comida por quilo - ${weightNum}kg`,
-        quantity: weightNum,
-        unit_price: pricePerKg,
-        total_price: foodTotal,
-      });
+        if (fetchError) throw fetchError;
+        if (!existingOrder) throw new Error("Comanda não encontrada");
 
-      // Create order items for extra items and reduce stock
-      if (selectedExtraItems.length > 0) {
-        const extraItemsData = selectedExtraItems.map(item => ({
+        order = existingOrder;
+
+        // Create order item for food
+        await supabase.from("order_items").insert({
           order_id: order.id,
-          extra_item_id: item.id,
-          quantity: item.quantity,
-          unit_price: item.price,
-          total_price: item.price * item.quantity,
-        }));
+          item_type: "food_weight",
+          description: `Comida por quilo - ${weightNum}kg`,
+          quantity: weightNum,
+          unit_price: pricePerKg,
+          total_price: foodTotal,
+        });
 
-        await supabase.from("order_extra_items").insert(extraItemsData);
+        // Update order totals
+        const newTotalWeight = order.total_weight + weightNum;
+        const newFoodTotal = order.food_total + foodTotal;
+        const newExtrasTotal = order.extras_total + extraItemsTotal;
+        const newTotalAmount = newFoodTotal + newExtrasTotal;
 
-        // Reduce stock for extra items using localStorage
-        for (const item of selectedExtraItems) {
-          // Ensure product exists in inventory
-          const product = ensureProductExists(item.name, item.price);
-          
-          // Reduce stock
-          const success = reduceProductStock(
-            product.id, 
-            item.quantity, 
-            order.id, 
-            'order',
-            `Venda automática - Comanda #${order.order_number}`
-          );
-          
-          if (!success) {
-            console.warn(`Não foi possível reduzir estoque para ${item.name}`);
+        const { error: updateError } = await supabase
+          .from("orders")
+          .update({
+            total_weight: newTotalWeight,
+            food_total: newFoodTotal,
+            extras_total: newExtrasTotal,
+            total_amount: newTotalAmount,
+          })
+          .eq("id", order.id);
+
+        if (updateError) throw updateError;
+
+        // Create order items for extra items and reduce stock
+        if (selectedExtraItems.length > 0) {
+          const extraItemsData = selectedExtraItems.map(item => ({
+            order_id: order.id,
+            extra_item_id: item.id,
+            quantity: item.quantity,
+            unit_price: item.price,
+            total_price: item.price * item.quantity,
+          }));
+
+          await supabase.from("order_extra_items").insert(extraItemsData);
+
+          // Reduce stock for extra items using localStorage
+          for (const item of selectedExtraItems) {
+            const product = ensureProductExists(item.name, item.price);
+            const success = reduceProductStock(
+              product.id, 
+              item.quantity, 
+              order.id, 
+              'order',
+              `Venda automática - Comanda #${order.order_number}`
+            );
+            
+            if (!success) {
+              console.warn(`Não foi possível reduzir estoque para ${item.name}`);
+            }
           }
         }
+
+        toast({
+          title: "Itens adicionados!",
+          description: `Itens adicionados à Comanda #${order.order_number} - R$ ${total.toFixed(2)}`,
+        });
+
+        // Atualizar lista de comandas abertas
+        await fetchOpenOrders();
+      } else {
+        // Create new order
+        const { data: newOrder, error } = await supabase
+          .from("orders")
+          .insert({
+            status: "open",
+            customer_name: finalCustomerName,
+            total_weight: weightNum,
+            food_total: foodTotal,
+            extras_total: extraItemsTotal,
+            total_amount: total,
+            opened_by: session?.user?.id,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        order = newOrder;
+
+        // Create order item for food
+        await supabase.from("order_items").insert({
+          order_id: order.id,
+          item_type: "food_weight",
+          description: `Comida por quilo - ${weightNum}kg`,
+          quantity: weightNum,
+          unit_price: pricePerKg,
+          total_price: foodTotal,
+        });
+
+        // Create order items for extra items and reduce stock
+        if (selectedExtraItems.length > 0) {
+          const extraItemsData = selectedExtraItems.map(item => ({
+            order_id: order.id,
+            extra_item_id: item.id,
+            quantity: item.quantity,
+            unit_price: item.price,
+            total_price: item.price * item.quantity,
+          }));
+
+          await supabase.from("order_extra_items").insert(extraItemsData);
+
+          // Reduce stock for extra items using localStorage
+          for (const item of selectedExtraItems) {
+            const product = ensureProductExists(item.name, item.price);
+            const success = reduceProductStock(
+              product.id, 
+              item.quantity, 
+              order.id, 
+              'order',
+              `Venda automática - Comanda #${order.order_number}`
+            );
+            
+            if (!success) {
+              console.warn(`Não foi possível reduzir estoque para ${item.name}`);
+            }
+          }
+        }
+
+        toast({
+          title: "Comanda criada!",
+          description: `Comanda #${order.order_number} - ${finalCustomerName} - R$ ${total.toFixed(2)}`,
+        });
+
+        // Imprimir comanda
+        await printOrderReceipt(order, finalCustomerName, weightNum, foodTotal, extraItemsTotal);
       }
 
-
-      toast({
-        title: "Comanda criada!",
-        description: `Comanda #${order.order_number} - ${finalCustomerName} - R$ ${total.toFixed(2)}`,
-      });
-
-          // Imprimir comanda
-          await printOrderReceipt(order, finalCustomerName, weightNum, foodTotal, extraItemsTotal);
-
       // Reset form
-      setCustomerName("");
-      setWeight("");
-      setSelectedCustomer(null);
+      if (!addToExistingOrder) {
+        setCustomerName("");
+        setWeight("");
+        setSelectedCustomer(null);
+      } else {
+        // Limpar apenas peso e itens extras, manter seleção da comanda
+        setWeight("");
+      }
       setSelectedExtraItems([]);
       
       // Navigate to orders or stay for next weighing
-      setTimeout(() => {
-        navigate("/dashboard/orders");
-      }, 1500);
+      if (!addToExistingOrder) {
+        setTimeout(() => {
+          navigate("/dashboard/orders");
+        }, 1500);
+      } else {
+        // Se estiver adicionando a uma comanda existente, recarregar as comandas e manter na página
+        await fetchOpenOrders();
+      }
     } catch (error: unknown) {
       toast({
-        title: "Erro ao criar comanda",
+        title: "Erro ao processar comanda",
         description: error instanceof Error ? error.message : "Erro desconhecido",
         variant: "destructive",
       });
@@ -458,6 +658,138 @@ ${ThermalPrinter.FEED}${ThermalPrinter.FEED}${ThermalPrinter.CUT}
           </div>
         </div>
 
+        {/* Opção para adicionar a comanda existente */}
+        <Card className="shadow-strong border-primary/20">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between space-x-4">
+              <div className="flex items-center space-x-3 flex-1">
+                <Users className="h-5 w-5 text-primary" />
+                <div className="flex-1">
+                  <Label htmlFor="add-to-existing" className="text-base font-medium cursor-pointer">
+                    Adicionar a comanda existente (múltiplas pessoas na mesma comanda)
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Ative esta opção quando quiser lançar itens em uma comanda já aberta
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="add-to-existing"
+                checked={addToExistingOrder}
+                onCheckedChange={async (checked) => {
+                  setAddToExistingOrder(checked);
+                  if (!checked) {
+                    setSelectedOrderId("");
+                  } else {
+                    // Recarregar comandas quando ativar
+                    await fetchOpenOrders();
+                  }
+                }}
+              />
+            </div>
+            
+            {addToExistingOrder && (
+              <div className="mt-4 pt-4 border-t space-y-2">
+                <Label htmlFor="select-order">Selecione a Comanda *</Label>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={selectedOrderId}
+                      onValueChange={setSelectedOrderId}
+                    >
+                      <SelectTrigger id="select-order">
+                        <SelectValue placeholder={openOrders.length === 0 ? "Nenhuma comanda aberta" : "Selecione uma comanda aberta"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {openOrders.length === 0 ? (
+                          <SelectItem value="none" disabled>
+                            Nenhuma comanda aberta disponível
+                          </SelectItem>
+                        ) : (
+                          openOrders.map((order) => (
+                            <SelectItem key={order.id} value={order.id}>
+                              Comanda #{order.order_number} - {order.customer_name} - R$ {Number(order.total_amount).toFixed(2)} ({Number(order.total_weight).toFixed(3)} kg)
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          // Buscar novamente
+                          const { data: openData } = await supabase
+                            .from("orders")
+                            .select("id, order_number, customer_name, total_amount, total_weight, status")
+                            .eq("status", "open")
+                            .order("order_number", { ascending: false });
+
+                          const { data: pendingData } = await supabase
+                            .from("orders")
+                            .select("id, order_number, customer_name, total_amount, total_weight, status")
+                            .eq("status", "pending")
+                            .order("order_number", { ascending: false });
+
+                          const allOpenOrders = [
+                            ...(openData || []),
+                            ...(pendingData || [])
+                          ];
+
+                          const uniqueOrders = Array.from(
+                            new Map(allOpenOrders.map(order => [order.id, order])).values()
+                          );
+
+                          setOpenOrders(uniqueOrders);
+                          const count = uniqueOrders.length;
+                          
+                          toast({
+                            title: "Comandas atualizadas",
+                            description: count > 0 
+                              ? `${count} comanda(s) aberta(s) encontrada(s)`
+                              : "Nenhuma comanda aberta encontrada",
+                          });
+                        } catch (err) {
+                          toast({
+                            title: "Erro ao atualizar",
+                            description: "Não foi possível recarregar as comandas",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                      className="shrink-0"
+                    >
+                      Atualizar
+                    </Button>
+                  </div>
+                  {openOrders.length === 0 && (
+                    <div className="p-3 bg-muted rounded-lg">
+                      <p className="text-sm text-muted-foreground">
+                        ⚠️ Nenhuma comanda aberta encontrada. Crie uma nova comanda ou verifique se há comandas com status "open" ou "pending".
+                      </p>
+                    </div>
+                  )}
+                </div>
+                {selectedOrderId && (
+                  <div className="mt-2 p-3 bg-primary/10 rounded-lg border border-primary/20">
+                    <p className="text-sm text-muted-foreground">
+                      <strong>Comanda selecionada:</strong>{" "}
+                      {openOrders.find(o => o.id === selectedOrderId) && (
+                        <>
+                          Comanda #{openOrders.find(o => o.id === selectedOrderId)!.order_number} -{" "}
+                          {openOrders.find(o => o.id === selectedOrderId)!.customer_name}
+                        </>
+                      )}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Manual Weighing Card */}
           <Card className="shadow-strong">
@@ -484,12 +816,14 @@ ${ThermalPrinter.FEED}${ThermalPrinter.FEED}${ThermalPrinter.CUT}
                 />
               </div>
 
-              <CustomerSearch
-                onCustomerSelect={handleCustomerSelect}
-                selectedCustomer={selectedCustomer}
-                placeholder="Buscar cliente cadastrado ou digite nome..."
-                onManualNameChange={(name) => setCustomerName(name)}
-              />
+              {!addToExistingOrder && (
+                <CustomerSearch
+                  onCustomerSelect={handleCustomerSelect}
+                  selectedCustomer={selectedCustomer}
+                  placeholder="Buscar cliente cadastrado ou digite nome..."
+                  onManualNameChange={(name) => setCustomerName(name)}
+                />
+              )}
             </CardContent>
           </Card>
 
@@ -595,11 +929,23 @@ ${ThermalPrinter.FEED}${ThermalPrinter.FEED}${ThermalPrinter.CUT}
 
               <Button
                 onClick={handleCreateOrder}
-                disabled={!weight || Number(weight) <= 0 || (!selectedCustomer && !customerName.trim()) || loading || printing}
+                disabled={
+                  !weight || 
+                  Number(weight) <= 0 || 
+                  (addToExistingOrder ? !selectedOrderId : (!selectedCustomer && !customerName.trim())) || 
+                  loading || 
+                  printing
+                }
                 size="lg"
                 className="w-full"
               >
-                {loading ? "Criando..." : printing ? "Imprimindo..." : "Criar Comanda"}
+                {loading 
+                  ? (addToExistingOrder ? "Adicionando..." : "Criando...") 
+                  : printing 
+                    ? "Imprimindo..." 
+                    : addToExistingOrder 
+                      ? "Adicionar à Comanda" 
+                      : "Criar Comanda"}
               </Button>
             </CardContent>
           </Card>
