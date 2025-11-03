@@ -69,11 +69,17 @@ const EditOrder = () => {
 
     // Cleanup function to restore order status when component unmounts
     return () => {
-      if (orderId && order) {
+      if (orderId && order && order.status === "pending") {
+        // Restaurar status para "open" apenas se ainda estiver em "pending"
         supabase
           .from("orders")
-          .update({ status: "open" })
-          .eq("id", orderId);
+          .update({ status: "open" as any })
+          .eq("id", orderId)
+          .then(({ error }) => {
+            if (error) {
+              console.error("Erro ao restaurar status da comanda:", error);
+            }
+          });
       }
     };
   }, [orderId]);
@@ -81,9 +87,10 @@ const EditOrder = () => {
   const fetchOrderData = async () => {
     try {
       // Set order to pending status when editing starts
+      // Type assertion necessário pois "pending" não está no enum de tipos gerados
       await supabase
         .from("orders")
-        .update({ status: "pending" })
+        .update({ status: "pending" as any })
         .eq("id", orderId);
 
       // Fetch order details
@@ -104,8 +111,44 @@ const EditOrder = () => {
 
       if (itemsError) throw itemsError;
 
+      // Fetch order extra items with join to extra_items
+      // Type assertion necessário pois order_extra_items não está nos tipos gerados
+      const { data: extraItemsData, error: extraItemsError } = await (supabase
+        .from("order_extra_items" as any)
+        .select(`
+          *,
+          extra_items (
+            id,
+            name,
+            description
+          )
+        `)
+        .eq("order_id", orderId)
+        .order("created_at", { ascending: true }) as any);
+
+      if (extraItemsError) {
+        console.error("Erro ao carregar itens extras:", extraItemsError);
+        // Não bloquear se der erro, apenas logar
+      }
+
       setOrder(orderData);
-      setOrderItems(itemsData || []);
+      
+      // Combine order_items and order_extra_items into a single array
+      const allItems: OrderItem[] = [
+        ...(itemsData || []),
+        // Map extra items to OrderItem format
+        ...((extraItemsData || []) as any[]).map((extraItem: any) => ({
+          id: extraItem.id,
+          item_type: "extra",
+          description: `${(extraItem.extra_items as any)?.name || 'Item Extra'} (x${extraItem.quantity})`,
+          quantity: extraItem.quantity,
+          unit_price: extraItem.unit_price,
+          total_price: extraItem.total_price,
+          extra_item_id: extraItem.extra_item_id,
+        }))
+      ];
+      
+      setOrderItems(allItems);
     } catch (error) {
       console.error("Erro ao carregar comanda:", error);
       toast({
@@ -183,12 +226,27 @@ const EditOrder = () => {
 
       if (error) throw error;
 
-      // Update order totals
-      const newTotalWeight = order.total_weight + weightNum;
-      const newFoodTotal = order.food_total + foodTotal;
-      const newTotalAmount = newFoodTotal + order.extras_total;
+      // Buscar comanda atualizada do banco para evitar problemas de concorrência
+      const { data: currentOrder, error: fetchError } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("id", order.id)
+        .single();
 
-      await supabase
+      if (fetchError) {
+        console.error("Erro ao buscar comanda atualizada:", fetchError);
+        // Continuar com cálculo local, mas logar o erro
+      }
+
+      // Usar dados atualizados se disponíveis, senão usar dados locais
+      const baseOrder = currentOrder || order;
+
+      // Update order totals - usar dados atualizados para evitar problemas de concorrência
+      const newTotalWeight = baseOrder.total_weight + weightNum;
+      const newFoodTotal = baseOrder.food_total + foodTotal;
+      const newTotalAmount = newFoodTotal + baseOrder.extras_total;
+
+      const { error: updateError } = await supabase
         .from("orders")
         .update({
           total_weight: newTotalWeight,
@@ -196,6 +254,8 @@ const EditOrder = () => {
           total_amount: newTotalAmount,
         })
         .eq("id", order.id);
+
+      if (updateError) throw updateError;
 
       // Update local state
       setOrderItems(prev => [...prev, newItem]);
@@ -213,11 +273,34 @@ const EditOrder = () => {
       });
     } catch (error) {
       console.error("Erro ao adicionar item:", error);
-      toast({
-        title: "Erro ao adicionar item",
-        description: "Não foi possível adicionar o item à comanda",
-        variant: "destructive",
-      });
+      // Tratamento específico de erros
+      if (error instanceof Error) {
+        if (error.message.includes("network") || error.message.includes("fetch")) {
+          toast({
+            title: "Erro de conexão",
+            description: "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.",
+            variant: "destructive",
+          });
+        } else if (error.message.includes("permission") || error.message.includes("unauthorized")) {
+          toast({
+            title: "Sem permissão",
+            description: "Você não tem permissão para adicionar itens a esta comanda.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Erro ao adicionar item",
+            description: error.message || "Não foi possível adicionar o item à comanda",
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "Erro ao adicionar item",
+          description: "Não foi possível adicionar o item à comanda",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -225,89 +308,206 @@ const EditOrder = () => {
     if (selectedExtraItems.length === 0) {
       toast({
         title: "Nenhum item selecionado",
-        description: "Selecione pelo menos um item extra",
+        description: "Selecione pelo menos um item extra para adicionar",
         variant: "destructive",
       });
       return;
     }
 
-    if (!order) return;
+    // Validação: verificar se todos os itens têm quantidade válida
+    const invalidItems = selectedExtraItems.filter(item => !item.quantity || item.quantity <= 0);
+    if (invalidItems.length > 0) {
+      toast({
+        title: "Quantidade inválida",
+        description: "Todos os itens devem ter uma quantidade maior que zero",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validação: verificar se todos os itens têm preço válido
+    const invalidPrices = selectedExtraItems.filter(item => !item.price || item.price <= 0);
+    if (invalidPrices.length > 0) {
+      toast({
+        title: "Preço inválido",
+        description: "Todos os itens devem ter um preço válido maior que zero",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!order) {
+      toast({
+        title: "Erro",
+        description: "Comanda não encontrada. Por favor, recarregue a página.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
+      // Corrigido: usar order_extra_items ao invés de order_items
       const extraItemsData = selectedExtraItems.map(item => ({
         order_id: order.id,
-        item_type: "extra",
-        description: `${item.name} (x${item.quantity})`,
+        extra_item_id: item.id,
         quantity: item.quantity,
         unit_price: item.price,
         total_price: item.price * item.quantity,
       }));
 
-      const { data: newItems, error } = await supabase
-        .from("order_items")
+      // Type assertion necessário pois order_extra_items não está nos tipos gerados
+      const { data: newItems, error: insertError } = await (supabase
+        .from("order_extra_items" as any)
         .insert(extraItemsData)
-        .select();
+        .select() as any);
 
-      if (error) throw error;
+      if (insertError) throw insertError;
 
       // Calculate new extras total
       const newExtrasTotal = selectedExtraItems.reduce((total, item) => 
         total + (item.price * item.quantity), 0
       );
 
-      const newTotalAmount = order.food_total + order.extras_total + newExtrasTotal;
+      // Corrigido: cálculo correto do total (não soma extras_total duas vezes)
+      const updatedExtrasTotal = order.extras_total + newExtrasTotal;
+      const newTotalAmount = order.food_total + updatedExtrasTotal;
 
       // Update order totals
-      await supabase
+      const { error: updateError } = await supabase
         .from("orders")
         .update({
-          extras_total: order.extras_total + newExtrasTotal,
+          extras_total: updatedExtrasTotal,
           total_amount: newTotalAmount,
         })
         .eq("id", order.id);
 
-      // Update local state
-      setOrderItems(prev => [...prev, ...newItems]);
+      if (updateError) throw updateError;
+
+      // Update local state - mapear order_extra_items para formato OrderItem
+      const mappedItems: OrderItem[] = (newItems as any[]).map((item: any) => ({
+        id: item.id,
+        item_type: "extra",
+        description: `${extraItems.find(ei => ei.id === item.extra_item_id)?.name || 'Item Extra'} (x${item.quantity})`,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        total_price: item.total_price,
+        extra_item_id: item.extra_item_id,
+      }));
+      
+      setOrderItems(prev => [...prev, ...mappedItems]);
       setOrder(prev => prev ? {
         ...prev,
-        extras_total: prev.extras_total + newExtrasTotal,
+        extras_total: updatedExtrasTotal,
         total_amount: newTotalAmount,
       } : null);
 
+      const itemsCount = selectedExtraItems.length;
       setSelectedExtraItems([]);
       toast({
         title: "Itens extras adicionados!",
-        description: `${selectedExtraItems.length} item(s) adicionado(s) à comanda`,
+        description: `${itemsCount} item(s) adicionado(s) à comanda`,
       });
     } catch (error) {
       console.error("Erro ao adicionar itens extras:", error);
-      toast({
-        title: "Erro ao adicionar itens",
-        description: "Não foi possível adicionar os itens extras",
-        variant: "destructive",
-      });
+      
+      // Tratamento específico de erros
+      if (error instanceof Error) {
+        if (error.message.includes("network") || error.message.includes("fetch")) {
+          toast({
+            title: "Erro de conexão",
+            description: "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.",
+            variant: "destructive",
+          });
+        } else if (error.message.includes("permission") || error.message.includes("unauthorized")) {
+          toast({
+            title: "Sem permissão",
+            description: "Você não tem permissão para adicionar itens a esta comanda.",
+            variant: "destructive",
+          });
+        } else if (error.message.includes("duplicate") || error.message.includes("unique")) {
+          toast({
+            title: "Erro ao adicionar",
+            description: "Parece que houve um conflito. Por favor, recarregue a página e tente novamente.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Erro ao adicionar itens",
+            description: error.message || "Não foi possível adicionar os itens extras",
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "Erro ao adicionar itens",
+          description: "Não foi possível adicionar os itens extras",
+          variant: "destructive",
+        });
+      }
     }
   };
 
   const removeItem = async (itemId: string) => {
-    if (!order) return;
+    if (!order) {
+      toast({
+        title: "Erro",
+        description: "Comanda não encontrada. Por favor, recarregue a página.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
       const itemToRemove = orderItems.find(item => item.id === itemId);
-      if (!itemToRemove) return;
+      if (!itemToRemove) {
+        toast({
+          title: "Item não encontrado",
+          description: "O item não foi encontrado na comanda",
+          variant: "destructive",
+        });
+        return;
+      }
 
-      // Remove item from database
-      const { error } = await supabase
-        .from("order_items")
-        .delete()
-        .eq("id", itemId);
+      // Remover item do banco - verificar se é item extra ou item normal
+      let error;
+      if (itemToRemove.item_type === "extra" && itemToRemove.extra_item_id) {
+        // Item extra deve ser removido de order_extra_items
+        // Type assertion necessário pois order_extra_items não está nos tipos gerados
+        const { error: deleteError } = await (supabase
+          .from("order_extra_items" as any)
+          .delete()
+          .eq("id", itemId) as any);
+        error = deleteError;
+      } else {
+        // Item normal deve ser removido de order_items
+        const { error: deleteError } = await supabase
+          .from("order_items")
+          .delete()
+          .eq("id", itemId);
+        error = deleteError;
+      }
 
       if (error) throw error;
 
+      // Buscar comanda atualizada do banco para evitar problemas de concorrência
+      const { data: currentOrder, error: fetchError } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("id", order.id)
+        .single();
+
+      if (fetchError) {
+        console.error("Erro ao buscar comanda atualizada:", fetchError);
+        // Continuar com cálculo local, mas logar o erro
+      }
+
+      // Usar dados atualizados se disponíveis, senão usar dados locais
+      const baseOrder = currentOrder || order;
+
       // Update order totals
-      let newTotalWeight = order.total_weight;
-      let newFoodTotal = order.food_total;
-      let newExtrasTotal = order.extras_total;
+      let newTotalWeight = baseOrder.total_weight;
+      let newFoodTotal = baseOrder.food_total;
+      let newExtrasTotal = baseOrder.extras_total;
 
       if (itemToRemove.item_type === "food_weight") {
         newTotalWeight -= itemToRemove.quantity;
@@ -316,9 +516,14 @@ const EditOrder = () => {
         newExtrasTotal -= itemToRemove.total_price;
       }
 
+      // Garantir que valores não sejam negativos
+      newTotalWeight = Math.max(0, newTotalWeight);
+      newFoodTotal = Math.max(0, newFoodTotal);
+      newExtrasTotal = Math.max(0, newExtrasTotal);
+
       const newTotalAmount = newFoodTotal + newExtrasTotal;
 
-      await supabase
+      const { error: updateError } = await supabase
         .from("orders")
         .update({
           total_weight: newTotalWeight,
@@ -327,6 +532,8 @@ const EditOrder = () => {
           total_amount: newTotalAmount,
         })
         .eq("id", order.id);
+
+      if (updateError) throw updateError;
 
       // Update local state
       setOrderItems(prev => prev.filter(item => item.id !== itemId));
@@ -344,11 +551,35 @@ const EditOrder = () => {
       });
     } catch (error) {
       console.error("Erro ao remover item:", error);
-      toast({
-        title: "Erro ao remover item",
-        description: "Não foi possível remover o item da comanda",
-        variant: "destructive",
-      });
+      
+      // Tratamento específico de erros
+      if (error instanceof Error) {
+        if (error.message.includes("network") || error.message.includes("fetch")) {
+          toast({
+            title: "Erro de conexão",
+            description: "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.",
+            variant: "destructive",
+          });
+        } else if (error.message.includes("permission") || error.message.includes("unauthorized")) {
+          toast({
+            title: "Sem permissão",
+            description: "Você não tem permissão para remover itens desta comanda.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Erro ao remover item",
+            description: error.message || "Não foi possível remover o item da comanda",
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "Erro ao remover item",
+          description: "Não foi possível remover o item da comanda",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -396,7 +627,28 @@ const EditOrder = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigate("/dashboard/orders")}
+              onClick={async () => {
+                // Restaurar status da comanda antes de sair
+                if (order && order.status === "pending") {
+                  try {
+                    const { error } = await supabase
+                      .from("orders")
+                      .update({ status: "open" as any })
+                      .eq("id", order.id);
+                    if (error) {
+                      console.error("Erro ao restaurar status:", error);
+                      toast({
+                        title: "Aviso",
+                        description: "Não foi possível restaurar o status da comanda automaticamente",
+                        variant: "destructive",
+                      });
+                    }
+                  } catch (err) {
+                    console.error("Erro ao restaurar status:", err);
+                  }
+                }
+                navigate("/dashboard/orders");
+              }}
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Voltar

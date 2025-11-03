@@ -30,17 +30,17 @@ export class ThermalPrinter {
   private static GS = '\x1D';
   private static LF = '\x0A';
 
-  // Comandos de formatação
-  private static CENTER = '\x1B\x61\x01'; // Centralizar texto
-  private static LEFT = '\x1B\x61\x00'; // Alinhar à esquerda
-  private static BOLD = '\x1B\x45\x01'; // Texto em negrito
-  private static NORMAL = '\x1B\x45\x00'; // Texto normal
-  private static LARGE = '\x1B\x21\x30'; // Texto grande (2x altura e largura)
-  private static EXTRA_LARGE = '\x1B\x21\x50'; // Texto extra grande (3x altura e largura)
-  private static MEDIUM = '\x1B\x21\x20'; // Texto médio (2x altura)
-  private static SMALL = '\x1B\x21\x00'; // Texto pequeno
-  private static CUT = '\x1D\x56\x00'; // Corte do papel
-  private static FEED = '\x0A'; // Avançar linha
+  // Comandos de formatação - tornados públicos para uso externo
+  static CENTER = '\x1B\x61\x01'; // Centralizar texto
+  static LEFT = '\x1B\x61\x00'; // Alinhar à esquerda
+  static BOLD = '\x1B\x45\x01'; // Texto em negrito
+  static NORMAL = '\x1B\x45\x00'; // Texto normal
+  static LARGE = '\x1B\x21\x30'; // Texto grande (2x altura e largura)
+  static EXTRA_LARGE = '\x1B\x21\x50'; // Texto extra grande (3x altura e largura)
+  static MEDIUM = '\x1B\x21\x20'; // Texto médio (2x altura)
+  static SMALL = '\x1B\x21\x00'; // Texto pequeno
+  static CUT = '\x1D\x56\x00'; // Corte do papel
+  static FEED = '\x0A'; // Avançar linha
 
   // Gerar cupom térmico
   static generateReceipt(orderData: OrderData): string {
@@ -178,7 +178,7 @@ export class ThermalPrinter {
   }
 
   // Impressão direta via USB (sem Web USB API)
-  private static async directUSBPrint(receipt: string): Promise<boolean> {
+  static async directUSBPrint(receipt: string): Promise<boolean> {
     try {
       // Método 1: Tentar impressão via endpoint local
       const localPrint = await this.tryLocalPrint(receipt);

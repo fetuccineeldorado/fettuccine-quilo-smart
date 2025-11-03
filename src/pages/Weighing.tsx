@@ -15,6 +15,7 @@ import { ThermalPrinter, OrderData } from "@/utils/thermalPrinter";
 import { AlertCircle, Utensils, Printer, Users } from "lucide-react";
 
 import { reduceProductStock, ensureProductExists } from "@/utils/inventoryUtils";
+import { getCachedSettings, clearSettingsCache } from "@/utils/settingsCache";
 
 
 const Weighing = () => {
@@ -128,7 +129,7 @@ const Weighing = () => {
       const { data: pendingData, error: pendingError } = await supabase
         .from("orders")
         .select("id, order_number, customer_name, total_amount, total_weight, status")
-        .eq("status", "pending")
+        .eq("status", "pending" as any)
         .order("order_number", { ascending: false });
 
       if (pendingError) {
@@ -242,10 +243,124 @@ const Weighing = () => {
 
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      // Usar timeout para evitar que operação trave indefinidamente
+      let sessionTimeout: NodeJS.Timeout;
+      const sessionPromise = supabase.auth.getSession();
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        sessionTimeout = setTimeout(
+          () => reject(new Error("Timeout: Verificação de sessão excedeu 10 segundos")),
+          10000
+        );
+      });
+
+      const { data: { session }, error: sessionError } = await Promise.race([
+        sessionPromise.then((result) => {
+          clearTimeout(sessionTimeout);
+          return result;
+        }),
+        timeoutPromise,
+      ]);
+
+      // Validação crítica: verificar se há sessão ativa
+      if (sessionError || !session?.user?.id) {
+        toast({
+          title: "Erro de autenticação",
+          description: "Sessão inválida. Por favor, faça login novamente.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
       
       const weightNum = Number(weight);
-      const foodTotal = weightNum * pricePerKg;
+      
+      // Validação de peso: verificar se é um número válido
+      if (isNaN(weightNum) || weightNum <= 0) {
+        toast({
+          title: "Peso inválido",
+          description: "Por favor, insira um peso válido maior que zero",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Validação adicional: verificar se peso não é negativo (mesmo que já validado acima)
+      if (weightNum < 0) {
+        toast({
+          title: "Peso inválido",
+          description: "O peso não pode ser negativo",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Validação: verificar se peso não é muito grande (proteção contra erros de digitação)
+      if (weightNum > 1000) {
+        toast({
+          title: "Peso muito alto",
+          description: "O peso informado parece estar incorreto. Por favor, verifique.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Validação de peso: buscar configurações do sistema com cache e timeout
+      let settingsTimeout: NodeJS.Timeout;
+      const fetchSettings = async () => {
+        return await supabase
+          .from("system_settings")
+          .select("maximum_weight, minimum_charge, price_per_kg")
+          .single();
+      };
+
+      const settingsPromise = getCachedSettings(fetchSettings);
+      const settingsTimeoutPromise = new Promise<never>((_, reject) => {
+        settingsTimeout = setTimeout(
+          () => reject(new Error("Timeout: Busca de configurações excedeu 10 segundos")),
+          10000
+        );
+      });
+
+      const { data: settings } = await Promise.race([
+        settingsPromise.then((result) => {
+          clearTimeout(settingsTimeout);
+          return result;
+        }),
+        settingsTimeoutPromise,
+      ]);
+      
+      // Validação de peso máximo (se configurado)
+      if (settings?.maximum_weight && weightNum > Number(settings.maximum_weight)) {
+        toast({
+          title: "Peso excede o máximo permitido",
+          description: `O peso máximo permitido é ${settings.maximum_weight} kg. Peso informado: ${weightNum.toFixed(3)} kg`,
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Validação de peso mínimo (verificar se atende cobrança mínima)
+      const currentPricePerKg = settings?.price_per_kg ? Number(settings.price_per_kg) : pricePerKg;
+      const calculatedFoodTotal = weightNum * currentPricePerKg;
+      
+      if (settings?.minimum_charge && calculatedFoodTotal < Number(settings.minimum_charge)) {
+        const minWeight = Number(settings.minimum_charge) / currentPricePerKg;
+        toast({
+          title: "Peso abaixo do mínimo",
+          description: `O peso mínimo para atender a cobrança mínima de R$ ${settings.minimum_charge} é ${minWeight.toFixed(3)} kg. Peso informado: ${weightNum.toFixed(3)} kg (valor: R$ ${calculatedFoodTotal.toFixed(2)})`,
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Usar preço atualizado do sistema se disponível
+      const finalPricePerKg = settings?.price_per_kg ? Number(settings.price_per_kg) : pricePerKg;
+      const foodTotal = weightNum * finalPricePerKg;
       const extraItemsTotal = calculateExtraItemsTotal();
       const total = foodTotal + extraItemsTotal;
 
@@ -265,14 +380,16 @@ const Weighing = () => {
         order = existingOrder;
 
         // Create order item for food
-        await supabase.from("order_items").insert({
+        const { error: insertItemError } = await supabase.from("order_items").insert({
           order_id: order.id,
           item_type: "food_weight",
           description: `Comida por quilo - ${weightNum}kg`,
           quantity: weightNum,
-          unit_price: pricePerKg,
+          unit_price: finalPricePerKg,
           total_price: foodTotal,
         });
+
+        if (insertItemError) throw insertItemError;
 
         // Update order totals
         const newTotalWeight = order.total_weight + weightNum;
@@ -294,6 +411,7 @@ const Weighing = () => {
 
         // Create order items for extra items and reduce stock
         if (selectedExtraItems.length > 0) {
+          console.log('📦 Preparando para inserir itens extras:', selectedExtraItems);
           const extraItemsData = selectedExtraItems.map(item => ({
             order_id: order.id,
             extra_item_id: item.id,
@@ -302,7 +420,16 @@ const Weighing = () => {
             total_price: item.price * item.quantity,
           }));
 
-          await supabase.from("order_extra_items").insert(extraItemsData);
+          console.log('📦 Dados preparados para inserção:', extraItemsData);
+          // Type assertion necessário pois order_extra_items não está nos tipos gerados
+          const { error: insertExtraError } = await (supabase.from("order_extra_items" as any).insert(extraItemsData) as any);
+          
+          if (insertExtraError) {
+            console.error('❌ Erro ao inserir itens extras:', insertExtraError);
+            throw insertExtraError;
+          }
+          
+          console.log('✅ Itens extras inseridos com sucesso');
 
           // Reduce stock for extra items using localStorage
           for (const item of selectedExtraItems) {
@@ -339,7 +466,7 @@ const Weighing = () => {
             food_total: foodTotal,
             extras_total: extraItemsTotal,
             total_amount: total,
-            opened_by: session?.user?.id,
+            opened_by: session.user.id,
           })
           .select()
           .single();
@@ -353,12 +480,13 @@ const Weighing = () => {
           item_type: "food_weight",
           description: `Comida por quilo - ${weightNum}kg`,
           quantity: weightNum,
-          unit_price: pricePerKg,
+          unit_price: finalPricePerKg,
           total_price: foodTotal,
         });
 
         // Create order items for extra items and reduce stock
         if (selectedExtraItems.length > 0) {
+          console.log('📦 Preparando para inserir itens extras:', selectedExtraItems);
           const extraItemsData = selectedExtraItems.map(item => ({
             order_id: order.id,
             extra_item_id: item.id,
@@ -367,7 +495,16 @@ const Weighing = () => {
             total_price: item.price * item.quantity,
           }));
 
-          await supabase.from("order_extra_items").insert(extraItemsData);
+          console.log('📦 Dados preparados para inserção:', extraItemsData);
+          // Type assertion necessário pois order_extra_items não está nos tipos gerados
+          const { error: insertExtraError } = await (supabase.from("order_extra_items" as any).insert(extraItemsData) as any);
+          
+          if (insertExtraError) {
+            console.error('❌ Erro ao inserir itens extras:', insertExtraError);
+            throw insertExtraError;
+          }
+          
+          console.log('✅ Itens extras inseridos com sucesso');
 
           // Reduce stock for extra items using localStorage
           for (const item of selectedExtraItems) {
@@ -416,6 +553,48 @@ const Weighing = () => {
         await fetchOpenOrders();
       }
     } catch (error: unknown) {
+      // Tratar erros de timeout especificamente
+      if (error instanceof Error && error.message.includes("Timeout")) {
+        toast({
+          title: "Operação demorou muito",
+          description: "A operação excedeu o tempo limite. Por favor, tente novamente ou verifique sua conexão.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Tratar erros de rede especificamente
+      if (error instanceof Error && (
+        error.message.includes("network") || 
+        error.message.includes("fetch") || 
+        error.message.includes("Failed to fetch") ||
+        error.message.includes("NetworkError")
+      )) {
+        toast({
+          title: "Erro de conexão",
+          description: "Não foi possível conectar ao servidor. Verifique sua conexão com a internet e tente novamente.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Tratar erros de duplicação (se houver)
+      if (error instanceof Error && (
+        error.message.includes("duplicate") || 
+        error.message.includes("unique") ||
+        error.message.includes("violates unique constraint")
+      )) {
+        toast({
+          title: "Erro ao criar comanda",
+          description: "Parece que houve um conflito ao criar a comanda. Por favor, tente novamente.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
       toast({
         title: "Erro ao processar comanda",
         description: error instanceof Error ? error.message : "Erro desconhecido",
@@ -431,18 +610,27 @@ const Weighing = () => {
     try {
       console.log('=== INICIANDO IMPRESSÃO DE COMANDA ===');
       
+      // Mapear selectedExtraItems para o formato ExtraItem esperado pelo ThermalPrinter
+      const extraItemsForPrint: Array<{ name: string; quantity: number; unit_price: number; total_price: number }> = 
+        selectedExtraItems.map(item => ({
+          name: item.name,
+          quantity: item.quantity,
+          unit_price: item.price,
+          total_price: item.price * item.quantity,
+        }));
+
       // Debug dos dados antes da impressão
       ThermalPrinter.debugPrintData(
         order, 
         customerName, 
         weight, 
         foodTotal, 
-        selectedExtraItems, 
+        extraItemsForPrint, 
         extraItemsTotal
       );
 
       // Usar impressão direta com HTML
-      const success = await ThermalPrinter.printOrderDirect(order, customerName, weight, foodTotal, selectedExtraItems, extraItemsTotal);
+      const success = await ThermalPrinter.printOrderDirect(order, customerName, weight, foodTotal, extraItemsForPrint, extraItemsTotal);
 
       if (success) {
         console.log('Impressão realizada com sucesso');
@@ -730,7 +918,7 @@ ${ThermalPrinter.FEED}${ThermalPrinter.FEED}${ThermalPrinter.CUT}
                           const { data: pendingData } = await supabase
                             .from("orders")
                             .select("id, order_number, customer_name, total_amount, total_weight, status")
-                            .eq("status", "pending")
+                            .eq("status", "pending" as any)
                             .order("order_number", { ascending: false });
 
                           const allOpenOrders = [
@@ -812,7 +1000,13 @@ ${ThermalPrinter.FEED}${ThermalPrinter.FEED}${ThermalPrinter.CUT}
                   min="0"
                   placeholder="0.000"
                   value={weight}
-                  onChange={(e) => setWeight(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // Permitir vazio, mas validar se for número
+                    if (value === '' || (!isNaN(Number(value)) && Number(value) >= 0 && Number(value) <= 1000)) {
+                      setWeight(value);
+                    }
+                  }}
                 />
               </div>
 
@@ -940,9 +1134,19 @@ ${ThermalPrinter.FEED}${ThermalPrinter.FEED}${ThermalPrinter.CUT}
                 className="w-full"
               >
                 {loading 
-                  ? (addToExistingOrder ? "Adicionando..." : "Criando...") 
+                  ? (
+                    <span className="flex items-center gap-2">
+                      <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></span>
+                      {addToExistingOrder ? "Adicionando à comanda..." : "Criando comanda..."}
+                    </span>
+                  )
                   : printing 
-                    ? "Imprimindo..." 
+                    ? (
+                      <span className="flex items-center gap-2">
+                        <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></span>
+                        Imprimindo...
+                      </span>
+                    )
                     : addToExistingOrder 
                       ? "Adicionar à Comanda" 
                       : "Criar Comanda"}

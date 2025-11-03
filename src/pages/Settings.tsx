@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Settings as SettingsIcon, Save } from "lucide-react";
+import { clearSettingsCache } from "@/utils/settingsCache";
 
 const Settings = () => {
   const { toast } = useToast();
@@ -56,9 +57,92 @@ const Settings = () => {
   };
 
   const handleSave = async () => {
+    // Validação de inputs numéricos
+    const pricePerKgNum = Number(settings.pricePerKg);
+    const minimumChargeNum = Number(settings.minimumCharge);
+    const maximumWeightNum = Number(settings.maximumWeight);
+
+    // Validação de preço por kg
+    if (isNaN(pricePerKgNum) || pricePerKgNum < 0) {
+      toast({
+        title: "Valor inválido",
+        description: "Preço por kg deve ser um número válido maior ou igual a zero",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (pricePerKgNum > 10000) {
+      toast({
+        title: "Valor muito alto",
+        description: "Preço por kg não pode ser maior que R$ 10.000,00",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validação de cobrança mínima
+    if (isNaN(minimumChargeNum) || minimumChargeNum < 0) {
+      toast({
+        title: "Valor inválido",
+        description: "Cobrança mínima deve ser um número válido maior ou igual a zero",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (minimumChargeNum > 10000) {
+      toast({
+        title: "Valor muito alto",
+        description: "Cobrança mínima não pode ser maior que R$ 10.000,00",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validação de peso máximo
+    if (isNaN(maximumWeightNum) || maximumWeightNum < 0) {
+      toast({
+        title: "Valor inválido",
+        description: "Peso máximo deve ser um número válido maior ou igual a zero",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (maximumWeightNum > 100) {
+      toast({
+        title: "Valor muito alto",
+        description: "Peso máximo não pode ser maior que 100 kg",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validação de lógica de negócio: cobrança mínima deve ser menor que peso máximo * preço por kg
+    if (maximumWeightNum > 0 && minimumChargeNum > maximumWeightNum * pricePerKgNum) {
+      toast({
+        title: "Valores inconsistentes",
+        description: `Cobrança mínima (R$ ${minimumChargeNum.toFixed(2)}) não pode ser maior que o valor máximo possível (${maximumWeightNum} kg × R$ ${pricePerKgNum.toFixed(2)} = R$ ${(maximumWeightNum * pricePerKgNum).toFixed(2)})`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      // Validação crítica: verificar se há sessão ativa
+      if (sessionError || !session?.user?.id) {
+        toast({
+          title: "Erro de autenticação",
+          description: "Sessão inválida. Por favor, faça login novamente.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
 
       // Primeiro, obter o ID da configuração atual
       const { data: currentSettings, error: fetchError } = await supabase
@@ -74,10 +158,10 @@ const Settings = () => {
       const { error } = await supabase
         .from("system_settings")
         .update({
-          price_per_kg: Number(settings.pricePerKg),
-          minimum_charge: Number(settings.minimumCharge),
-          maximum_weight: Number(settings.maximumWeight),
-          updated_by: session?.user?.id,
+          price_per_kg: pricePerKgNum,
+          minimum_charge: minimumChargeNum,
+          maximum_weight: maximumWeightNum,
+          updated_by: session.user.id,
         })
         .eq("id", currentSettings.id);
 
@@ -88,10 +172,54 @@ const Settings = () => {
         description: "As alterações foram aplicadas com sucesso",
       });
 
-      // Recarregar as configurações para confirmar
+      // Limpar cache e recarregar as configurações para confirmar
+      clearSettingsCache();
       await fetchSettings();
     } catch (error: unknown) {
       console.error('Erro ao salvar configurações:', error);
+
+      // Tratar erros de timeout especificamente
+      if (error instanceof Error && error.message.includes("Timeout")) {
+        toast({
+          title: "Operação demorou muito",
+          description: "A operação excedeu o tempo limite. Por favor, tente novamente ou verifique sua conexão.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Tratar erros de rede especificamente
+      if (error instanceof Error && (
+        error.message.includes("network") || 
+        error.message.includes("fetch") || 
+        error.message.includes("Failed to fetch") ||
+        error.message.includes("NetworkError")
+      )) {
+        toast({
+          title: "Erro de conexão",
+          description: "Não foi possível conectar ao servidor. Verifique sua conexão com a internet e tente novamente.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Tratar erros de permissão
+      if (error instanceof Error && (
+        error.message.includes("permission") || 
+        error.message.includes("unauthorized") ||
+        error.message.includes("403")
+      )) {
+        toast({
+          title: "Sem permissão",
+          description: "Você não tem permissão para alterar as configurações do sistema.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
       toast({
         title: "Erro ao salvar configurações",
         description: error instanceof Error ? error.message : "Erro desconhecido",
@@ -131,9 +259,13 @@ const Settings = () => {
                 step="0.01"
                 min="0"
                 value={settings.pricePerKg}
-                onChange={(e) =>
-                  setSettings({ ...settings, pricePerKg: e.target.value })
-                }
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Validar que é um número válido
+                  if (value === '' || (!isNaN(Number(value)) && Number(value) >= 0)) {
+                    setSettings({ ...settings, pricePerKg: value });
+                  }
+                }}
               />
               <p className="text-sm text-muted-foreground">
                 Valor cobrado por quilograma de comida
@@ -148,9 +280,13 @@ const Settings = () => {
                 step="0.01"
                 min="0"
                 value={settings.minimumCharge}
-                onChange={(e) =>
-                  setSettings({ ...settings, minimumCharge: e.target.value })
-                }
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Validar que é um número válido
+                  if (value === '' || (!isNaN(Number(value)) && Number(value) >= 0)) {
+                    setSettings({ ...settings, minimumCharge: value });
+                  }
+                }}
               />
               <p className="text-sm text-muted-foreground">
                 Valor mínimo a ser cobrado por refeição
@@ -165,9 +301,13 @@ const Settings = () => {
                 step="0.01"
                 min="0"
                 value={settings.maximumWeight}
-                onChange={(e) =>
-                  setSettings({ ...settings, maximumWeight: e.target.value })
-                }
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Validar que é um número válido
+                  if (value === '' || (!isNaN(Number(value)) && Number(value) >= 0)) {
+                    setSettings({ ...settings, maximumWeight: value });
+                  }
+                }}
               />
               <p className="text-sm text-muted-foreground">
                 Peso máximo permitido por prato

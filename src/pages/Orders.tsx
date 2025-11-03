@@ -106,10 +106,11 @@ const Orders = () => {
 
       // Deletar itens extras relacionados
       console.log('🔄 Passo 2: Deletando itens extras...');
-      const { error: extraItemsError } = await supabase
-        .from("order_extra_items")
+      // Type assertion necessário pois order_extra_items não está nos tipos gerados
+      const { error: extraItemsError } = await (supabase
+        .from("order_extra_items" as any)
         .delete()
-        .eq("order_id", orderId);
+        .eq("order_id", orderId) as any);
 
       if (extraItemsError) {
         console.error('❌ Erro ao deletar itens extras da comanda:', extraItemsError);
@@ -149,7 +150,7 @@ const Orders = () => {
       console.log('🔍 Comanda encontrada:', existingOrder);
       
       // Tentar deletar a comanda
-      const { error: orderError, count } = await supabase
+      const { error: orderError } = await supabase
         .from("orders")
         .delete()
         .eq("id", orderId);
@@ -165,15 +166,7 @@ const Orders = () => {
         throw orderError;
       }
       
-      console.log('✅ Comanda principal deletada com sucesso. Registros afetados:', count);
-      
-      if (count === 0) {
-        console.log('⚠️ ATENÇÃO: Nenhum registro foi afetado! Isso pode indicar:');
-        console.log('⚠️ 1. RLS (Row Level Security) bloqueando a exclusão');
-        console.log('⚠️ 2. Permissões insuficientes');
-        console.log('⚠️ 3. Chaves estrangeiras impedindo a exclusão');
-        throw new Error('Nenhum registro foi afetado pela exclusão');
-      }
+      console.log('✅ Comanda principal deletada com sucesso');
 
       console.log('🎉 Exclusão concluída com sucesso!');
       
@@ -207,6 +200,9 @@ const Orders = () => {
         description: `Comanda #${orderNumber} foi excluída com sucesso.`,
       });
 
+      // Recarregar comandas para garantir sincronização
+      await fetchOrders();
+
       // Forçar re-renderização
       console.log('🔄 Forçando re-renderização...');
       setRefreshKey(prev => prev + 1);
@@ -235,13 +231,46 @@ const Orders = () => {
       console.log('✅ Lista de comandas recarregada');
     } catch (error: unknown) {
       console.error('💥 Erro geral ao excluir comanda:', error);
-      toast({
-        title: "Erro ao excluir comanda",
-        description: error instanceof Error ? error.message : "Erro desconhecido",
-        variant: "destructive",
-      });
+      
+      // Tratamento específico de erros
+      if (error instanceof Error) {
+        if (error.message.includes("network") || error.message.includes("fetch")) {
+          toast({
+            title: "Erro de conexão",
+            description: "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.",
+            variant: "destructive",
+          });
+        } else if (error.message.includes("permission") || error.message.includes("unauthorized") || error.message.includes("RLS")) {
+          toast({
+            title: "Sem permissão",
+            description: "Você não tem permissão para excluir comandas.",
+            variant: "destructive",
+          });
+        } else if (error.message.includes("foreign key") || error.message.includes("violates foreign key")) {
+          toast({
+            title: "Erro ao excluir",
+            description: "Não é possível excluir esta comanda pois há dados relacionados que precisam ser removidos primeiro.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Erro ao excluir comanda",
+            description: error.message || "Erro desconhecido ao excluir a comanda",
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "Erro ao excluir comanda",
+          description: "Erro desconhecido ao excluir a comanda",
+          variant: "destructive",
+        });
+      }
+      
+      // Recarregar comandas mesmo em caso de erro para garantir estado consistente
+      await fetchOrders();
     }
-  }, [orders, toast]);
+  }, [orders, toast, fetchOrders]);
 
   useEffect(() => {
     fetchOrders();
@@ -274,23 +303,106 @@ const Orders = () => {
   }, [orders]);
 
   const handleCancelOrder = async (orderId: string) => {
-    const { error } = await supabase
-      .from("orders")
-      .update({ status: "cancelled" })
-      .eq("id", orderId);
+    // Validação de sessão
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-    if (error) {
+    if (sessionError || !session?.user?.id) {
       toast({
-        title: "Erro ao cancelar comanda",
-        description: error.message,
+        title: "Erro de autenticação",
+        description: "Sessão inválida. Por favor, faça login novamente.",
         variant: "destructive",
       });
-    } else {
+      return;
+    }
+
+    // Confirmação antes de cancelar
+    if (!confirm("Tem certeza que deseja cancelar esta comanda? Esta ação não pode ser desfeita.")) {
+      return;
+    }
+
+    try {
+      // Verificar se comanda existe e obter dados atuais
+      const { data: currentOrder, error: fetchError } = await supabase
+        .from("orders")
+        .select("id, status, order_number")
+        .eq("id", orderId)
+        .single();
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      if (!currentOrder) {
+        toast({
+          title: "Comanda não encontrada",
+          description: "A comanda não foi encontrada no sistema",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Verificar se comanda já está cancelada ou fechada
+      if (currentOrder.status === "cancelled") {
+        toast({
+          title: "Comanda já cancelada",
+          description: "Esta comanda já foi cancelada anteriormente",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (currentOrder.status === "closed") {
+        if (!confirm("⚠️ ATENÇÃO: Esta comanda está FECHADA e pode ter pagamentos registrados. Deseja realmente cancelá-la?")) {
+          return;
+        }
+      }
+
+      // Atualizar status
+      const { error: updateError } = await supabase
+        .from("orders")
+        .update({ status: "cancelled" })
+        .eq("id", orderId);
+
+      if (updateError) {
+        throw updateError;
+      }
+
       toast({
-        title: "Comanda cancelada",
-        description: "A comanda foi cancelada com sucesso",
+        title: "Comanda cancelada!",
+        description: `Comanda #${currentOrder.order_number} cancelada com sucesso`,
       });
       fetchOrders();
+    } catch (error: unknown) {
+      console.error("Erro ao cancelar comanda:", error);
+      
+      // Tratamento específico de erros
+      if (error instanceof Error) {
+        if (error.message.includes("network") || error.message.includes("fetch")) {
+          toast({
+            title: "Erro de conexão",
+            description: "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.",
+            variant: "destructive",
+          });
+        } else if (error.message.includes("permission") || error.message.includes("unauthorized")) {
+          toast({
+            title: "Sem permissão",
+            description: "Você não tem permissão para cancelar comandas.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Erro ao cancelar comanda",
+            description: error.message,
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "Erro ao cancelar comanda",
+          description: "Erro desconhecido ao cancelar a comanda",
+          variant: "destructive",
+        });
+      }
     }
   };
 

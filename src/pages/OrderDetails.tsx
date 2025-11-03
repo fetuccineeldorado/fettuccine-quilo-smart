@@ -53,6 +53,16 @@ const OrderDetails = () => {
   }, [orderId]);
 
   const fetchOrderDetails = async () => {
+    if (!orderId) {
+      toast({
+        title: "Erro",
+        description: "ID da comanda não fornecido",
+        variant: "destructive",
+      });
+      navigate("/dashboard/orders");
+      return;
+    }
+
     try {
       // Fetch order details
       const { data: orderData, error: orderError } = await supabase
@@ -61,7 +71,29 @@ const OrderDetails = () => {
         .eq("id", orderId)
         .single();
 
-      if (orderError) throw orderError;
+      if (orderError) {
+        // Tratamento específico para comanda não encontrada
+        if (orderError.code === "PGRST116" || orderError.message.includes("No rows")) {
+          toast({
+            title: "Comanda não encontrada",
+            description: "A comanda solicitada não foi encontrada no sistema",
+            variant: "destructive",
+          });
+          navigate("/dashboard/orders");
+          return;
+        }
+        throw orderError;
+      }
+
+      if (!orderData) {
+        toast({
+          title: "Comanda não encontrada",
+          description: "A comanda não foi encontrada",
+          variant: "destructive",
+        });
+        navigate("/dashboard/orders");
+        return;
+      }
 
       // Fetch order items
       const { data: itemsData, error: itemsError } = await supabase
@@ -72,15 +104,75 @@ const OrderDetails = () => {
 
       if (itemsError) throw itemsError;
 
+      // Fetch order extra items with join to extra_items
+      // Type assertion necessário pois order_extra_items não está nos tipos gerados
+      const { data: extraItemsData, error: extraItemsError } = await (supabase
+        .from("order_extra_items" as any)
+        .select(`
+          *,
+          extra_items (
+            id,
+            name,
+            description
+          )
+        `)
+        .eq("order_id", orderId)
+        .order("created_at", { ascending: true }) as any);
+
+      if (extraItemsError) {
+        console.error("Erro ao carregar itens extras:", extraItemsError);
+        // Não bloquear se der erro, apenas logar
+      }
+
       setOrder(orderData);
-      setOrderItems(itemsData || []);
+      
+      // Combine order_items and order_extra_items into a single array
+      const allItems: OrderItem[] = [
+        ...(itemsData || []),
+        // Map extra items to OrderItem format
+        ...((extraItemsData || []) as any[]).map((extraItem: any) => ({
+          id: extraItem.id,
+          item_type: "extra",
+          description: `${(extraItem.extra_items as any)?.name || 'Item Extra'} (x${extraItem.quantity})`,
+          quantity: extraItem.quantity,
+          unit_price: extraItem.unit_price,
+          total_price: extraItem.total_price,
+          created_at: extraItem.created_at,
+        }))
+      ];
+      
+      setOrderItems(allItems);
     } catch (error) {
       console.error("Erro ao carregar detalhes da comanda:", error);
-      toast({
-        title: "Erro ao carregar comanda",
-        description: "Não foi possível carregar os detalhes da comanda",
-        variant: "destructive",
-      });
+      
+      // Tratamento específico de erros
+      if (error instanceof Error) {
+        if (error.message.includes("network") || error.message.includes("fetch")) {
+          toast({
+            title: "Erro de conexão",
+            description: "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.",
+            variant: "destructive",
+          });
+        } else if (error.message.includes("permission") || error.message.includes("unauthorized")) {
+          toast({
+            title: "Sem permissão",
+            description: "Você não tem permissão para visualizar esta comanda.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Erro ao carregar comanda",
+            description: error.message || "Não foi possível carregar os detalhes da comanda",
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "Erro ao carregar comanda",
+          description: "Não foi possível carregar os detalhes da comanda",
+          variant: "destructive",
+        });
+      }
       navigate("/dashboard/orders");
     } finally {
       setLoading(false);

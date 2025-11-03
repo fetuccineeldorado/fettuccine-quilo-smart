@@ -34,10 +34,11 @@ const Cashier = () => {
 
   const fetchOpenOrders = async () => {
     try {
+      // Corrigido: buscar comandas "open" e "pending" (em edição)
       const { data, error } = await supabase
         .from("orders")
         .select("id, order_number, total_amount, total_weight, status, customer_name")
-        .in("status", ["open"])
+        .in("status", ["open", "pending"])
         .order("order_number", { ascending: false });
 
       if (error) {
@@ -53,9 +54,22 @@ const Cashier = () => {
       }
     } catch (err) {
       console.error('Erro geral ao carregar comandas abertas:', err);
+      
+      // Tratamento específico de erros
+      let errorMessage = "Erro desconhecido";
+      if (err instanceof Error) {
+        if (err.message.includes("network") || err.message.includes("fetch")) {
+          errorMessage = "Erro de conexão. Verifique sua internet e tente novamente.";
+        } else if (err.message.includes("permission") || err.message.includes("unauthorized")) {
+          errorMessage = "Você não tem permissão para visualizar comandas.";
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
       toast({
         title: "Erro ao carregar comandas",
-        description: "Erro desconhecido",
+        description: errorMessage,
         variant: "destructive",
       });
       setOrders([]);
@@ -80,11 +94,42 @@ const Cashier = () => {
     }
 
     if (paymentMethod === "cash") {
+      // Validação de valor recebido
+      if (!amountReceived || amountReceived.trim() === "") {
+        toast({
+          title: "Valor não informado",
+          description: "Por favor, informe o valor recebido",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const received = Number(amountReceived);
+      
+      // Validação de número válido
+      if (isNaN(received) || received <= 0) {
+        toast({
+          title: "Valor inválido",
+          description: "Por favor, informe um valor válido maior que zero",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Validação de valor muito alto (proteção contra erros de digitação)
+      if (received > Number(selectedOrder.total_amount) * 10) {
+        toast({
+          title: "Valor muito alto",
+          description: "O valor informado parece estar incorreto. Por favor, verifique.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       if (received < Number(selectedOrder.total_amount)) {
         toast({
           title: "Valor insuficiente",
-          description: "Valor recebido é menor que o total",
+          description: `Valor recebido (R$ ${received.toFixed(2)}) é menor que o total (R$ ${Number(selectedOrder.total_amount).toFixed(2)})`,
           variant: "destructive",
         });
         return;
@@ -93,26 +138,111 @@ const Cashier = () => {
 
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      // Usar timeout para evitar que operação trave indefinidamente
+      let sessionTimeout: NodeJS.Timeout;
+      const sessionPromise = supabase.auth.getSession();
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        sessionTimeout = setTimeout(
+          () => reject(new Error("Timeout: Verificação de sessão excedeu 10 segundos")),
+          10000
+        );
+      });
 
-      // Create payment record
-      await supabase.from("payments").insert([{
+      const { data: { session }, error: sessionError } = await Promise.race([
+        sessionPromise.then((result) => {
+          clearTimeout(sessionTimeout);
+          return result;
+        }),
+        timeoutPromise,
+      ]);
+
+      // Validação crítica: verificar se há sessão ativa
+      if (sessionError || !session?.user?.id) {
+        toast({
+          title: "Erro de autenticação",
+          description: "Sessão inválida. Por favor, faça login novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Create payment record - verificar erro
+      const { error: paymentError } = await supabase.from("payments").insert([{
         order_id: selectedOrder.id,
         payment_method: paymentMethod as "cash" | "credit" | "debit" | "pix",
         amount: Number(selectedOrder.total_amount),
         change_amount: paymentMethod === "cash" ? calculateChange() : 0,
-        processed_by: session?.user?.id,
+        processed_by: session.user.id,
       }]);
 
-      // Update order status
-      await supabase
+      if (paymentError) {
+        console.error('Erro ao criar pagamento:', paymentError);
+        throw paymentError;
+      }
+
+      // Update order status - verificar erro
+      const { error: updateError } = await supabase
         .from("orders")
         .update({
           status: "closed",
           closed_at: new Date().toISOString(),
-          closed_by: session?.user?.id,
+          closed_by: session.user.id,
         })
         .eq("id", selectedOrder.id);
+
+      if (updateError) {
+        console.error('Erro ao atualizar comanda:', updateError);
+        // Tentar reverter pagamento criado (rollback manual)
+        try {
+          // Buscar o último pagamento criado para esta comanda por este usuário
+          const { data: lastPayment, error: fetchError } = await supabase
+            .from("payments")
+            .select("id")
+            .eq("order_id", selectedOrder.id)
+            .eq("processed_by", session.user.id)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .single();
+          
+          if (!fetchError && lastPayment) {
+            // Deletar o pagamento encontrado
+            const { error: deletePaymentError } = await supabase
+              .from("payments")
+              .delete()
+              .eq("id", lastPayment.id);
+            
+            if (deletePaymentError) {
+              console.error('Erro ao reverter pagamento:', deletePaymentError);
+              toast({
+                title: "Erro crítico",
+                description: "Pagamento foi registrado mas não foi possível fechar a comanda. Contate o suporte imediatamente.",
+                variant: "destructive",
+              });
+            } else {
+              toast({
+                title: "Operação revertida",
+                description: "Erro ao fechar comanda. Pagamento foi cancelado automaticamente.",
+                variant: "destructive",
+              });
+            }
+          } else {
+            console.error('Erro ao buscar pagamento para reverter:', fetchError);
+            toast({
+              title: "Erro crítico",
+              description: "Pagamento foi registrado mas não foi possível fechar a comanda. Contate o suporte imediatamente.",
+              variant: "destructive",
+            });
+          }
+        } catch (rollbackError) {
+          console.error('Erro ao tentar rollback:', rollbackError);
+          toast({
+            title: "Erro crítico",
+            description: "Pagamento foi registrado mas não foi possível fechar a comanda. Contate o suporte imediatamente.",
+            variant: "destructive",
+          });
+        }
+        throw updateError;
+      }
 
       toast({
         title: "Pagamento processado!",
@@ -125,6 +255,33 @@ const Cashier = () => {
       setAmountReceived("");
       fetchOpenOrders();
     } catch (error: unknown) {
+      // Tratar erros de timeout especificamente
+      if (error instanceof Error && error.message.includes("Timeout")) {
+        toast({
+          title: "Operação demorou muito",
+          description: "A operação excedeu o tempo limite. Por favor, tente novamente ou verifique sua conexão.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Tratar erros de rede especificamente
+      if (error instanceof Error && (
+        error.message.includes("network") || 
+        error.message.includes("fetch") || 
+        error.message.includes("Failed to fetch") ||
+        error.message.includes("NetworkError")
+      )) {
+        toast({
+          title: "Erro de conexão",
+          description: "Não foi possível conectar ao servidor. Verifique sua conexão com a internet e tente novamente.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
       toast({
         title: "Erro ao processar pagamento",
         description: error instanceof Error ? error.message : "Erro desconhecido",
@@ -259,7 +416,13 @@ const Cashier = () => {
                       min="0"
                       placeholder="0.00"
                       value={amountReceived}
-                      onChange={(e) => setAmountReceived(e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        // Permitir vazio, mas validar se for número
+                        if (value === '' || (!isNaN(Number(value)) && Number(value) >= 0 && Number(value) <= 100000)) {
+                          setAmountReceived(value);
+                        }
+                      }}
                     />
                   </div>
 
