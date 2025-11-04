@@ -79,17 +79,41 @@ const ExtraItemsManagement = () => {
     try {
       setLoading(true);
       
-      // Buscar itens extras
-      const { data: extraItemsData, error: itemsError } = await supabase
+      // Tentar buscar com todos os campos primeiro
+      let result = await supabase
         .from("extra_items")
         .select("*")
         .order("name");
 
+      let extraItemsData = result.data;
+      let itemsError = result.error;
+
+      // Se falhar por causa de colunas faltando, tentar com campos básicos
+      if (
+        itemsError &&
+        (itemsError.code === "PGRST116" ||
+          itemsError.message?.includes("Could not find") ||
+          itemsError.message?.includes("column") ||
+          itemsError.status === 400)
+      ) {
+        console.log(
+          "Tentando buscar apenas com campos básicos devido a erro:",
+          itemsError.message
+        );
+        result = await supabase
+          .from("extra_items")
+          .select("id, name, description, price, category, is_active, created_at, updated_at")
+          .order("name");
+        
+        extraItemsData = result.data;
+        itemsError = result.error;
+      }
+
       if (itemsError) throw itemsError;
 
-      // Buscar produtos vinculados (se houver)
-      const itemsWithProductIds = (extraItemsData || []).filter(item => item.product_id);
-      const productIds = itemsWithProductIds.map(item => item.product_id).filter(Boolean) as string[];
+      // Buscar produtos vinculados (se houver e se product_id existir)
+      const itemsWithProductIds = (extraItemsData || []).filter(item => (item as any).product_id);
+      const productIds = itemsWithProductIds.map(item => (item as any).product_id).filter(Boolean) as string[];
 
       let productsMap: Record<string, any> = {};
       if (productIds.length > 0) {
@@ -108,13 +132,19 @@ const ExtraItemsManagement = () => {
 
       // Processar dados para incluir estoque do produto vinculado
       const processedItems = (extraItemsData || []).map(item => {
-        const product = item.product_id ? productsMap[item.product_id] : null;
+        const itemAny = item as any;
+        const product = itemAny.product_id ? productsMap[itemAny.product_id] : null;
         
         return {
           ...item,
-          current_stock: product?.current_stock ?? item.current_stock ?? 0,
-          min_stock: product?.min_stock ?? item.min_stock ?? 0,
+          current_stock: product?.current_stock ?? itemAny.current_stock ?? 0,
+          min_stock: product?.min_stock ?? itemAny.min_stock ?? 0,
           product_stock: product?.current_stock ?? null,
+          // Campos opcionais com valores padrão se não existirem
+          track_stock: itemAny.track_stock ?? false,
+          unit: itemAny.unit ?? "unidade",
+          max_stock: itemAny.max_stock ?? null,
+          product_id: itemAny.product_id ?? null,
         };
       });
 
@@ -123,7 +153,7 @@ const ExtraItemsManagement = () => {
       console.error("Erro ao carregar itens extras:", error);
       toast({
         title: "Erro ao carregar itens",
-        description: "Não foi possível carregar os itens extras",
+        description: "Não foi possível carregar os itens extras. Verifique se a tabela 'extra_items' existe no banco de dados.",
         variant: "destructive",
       });
     } finally {
@@ -175,30 +205,88 @@ const ExtraItemsManagement = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validação básica
+    if (!formData.name.trim()) {
+      toast({
+        title: "Erro de validação",
+        description: "O nome do item é obrigatório",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.price || parseFloat(formData.price) <= 0) {
+      toast({
+        title: "Erro de validação",
+        description: "O preço deve ser maior que zero",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
-      const itemData: any = {
-        name: formData.name,
-        description: formData.description || null,
+      // Dados completos (com campos de estoque)
+      const fullItemData: any = {
+        name: formData.name.trim(),
+        description: formData.description?.trim() || null,
         price: parseFloat(formData.price),
         category: formData.category,
         is_active: formData.is_active,
-        track_stock: formData.track_stock,
-        unit: formData.unit,
       };
 
+      // Adicionar campos de estoque se existirem
+      if (formData.track_stock !== undefined) {
+        fullItemData.track_stock = formData.track_stock;
+      }
+      if (formData.unit) {
+        fullItemData.unit = formData.unit;
+      }
       if (formData.track_stock) {
-        itemData.current_stock = parseFloat(formData.current_stock) || 0;
-        itemData.min_stock = parseFloat(formData.min_stock) || 0;
+        fullItemData.current_stock = parseFloat(formData.current_stock) || 0;
+        fullItemData.min_stock = parseFloat(formData.min_stock) || 0;
         if (formData.max_stock) {
-          itemData.max_stock = parseFloat(formData.max_stock);
+          fullItemData.max_stock = parseFloat(formData.max_stock);
         }
       }
 
+      // Dados básicos (fallback)
+      const basicItemData: any = {
+        name: formData.name.trim(),
+        description: formData.description?.trim() || null,
+        price: parseFloat(formData.price),
+        category: formData.category,
+        is_active: formData.is_active,
+      };
+
+      let error: any = null;
+
       if (editingItem) {
-        const { error } = await supabase
+        // Tentar atualizar com dados completos primeiro
+        let result = await supabase
           .from("extra_items")
-          .update(itemData)
+          .update(fullItemData)
           .eq("id", editingItem.id);
+
+        error = result.error;
+
+        // Se falhar por causa de colunas faltando, tentar com dados básicos
+        if (
+          error &&
+          (error.code === "PGRST116" ||
+            error.message?.includes("Could not find") ||
+            error.message?.includes("column") ||
+            error.status === 400)
+        ) {
+          console.log(
+            "Tentando atualizar apenas com campos básicos devido a erro:",
+            error.message
+          );
+          result = await supabase
+            .from("extra_items")
+            .update(basicItemData)
+            .eq("id", editingItem.id);
+          error = result.error;
+        }
 
         if (error) throw error;
 
@@ -207,9 +295,25 @@ const ExtraItemsManagement = () => {
           description: `${formData.name} foi atualizado com sucesso`,
         });
       } else {
-        const { error } = await supabase
-          .from("extra_items")
-          .insert(itemData);
+        // Tentar inserir com dados completos primeiro
+        let result = await supabase.from("extra_items").insert(fullItemData);
+        error = result.error;
+
+        // Se falhar por causa de colunas faltando, tentar com dados básicos
+        if (
+          error &&
+          (error.code === "PGRST116" ||
+            error.message?.includes("Could not find") ||
+            error.message?.includes("column") ||
+            error.status === 400)
+        ) {
+          console.log(
+            "Tentando inserir apenas com campos básicos devido a erro:",
+            error.message
+          );
+          result = await supabase.from("extra_items").insert(basicItemData);
+          error = result.error;
+        }
 
         if (error) throw error;
 
@@ -223,9 +327,22 @@ const ExtraItemsManagement = () => {
       fetchItems();
     } catch (error: any) {
       console.error("Erro ao salvar item:", error);
+      
+      let errorMessage = "Não foi possível salvar o item";
+      
+      if (error.message?.includes("Could not find")) {
+        errorMessage = `Erro: Coluna não encontrada. A migration de integração de estoque pode não ter sido aplicada. Acesse o Supabase Dashboard > SQL Editor e execute a migration: supabase/migrations/20250104000001_integrate_extra_items_stock.sql`;
+      } else if (error.code === "42501" || error.message?.includes("permission denied") || error.message?.includes("policy") || error.message?.includes("RLS")) {
+        errorMessage = `Erro de permissão: Você não tem permissão para criar/editar itens extras. Verifique se você está autenticado e se sua role permite esta ação. A política RLS pode estar bloqueando a operação.`;
+      } else if (error.message) {
+        errorMessage = error.message;
+      } else if (error.code) {
+        errorMessage = `Erro ${error.code}: ${error.message || "Erro desconhecido"}`;
+      }
+      
       toast({
         title: "Erro ao salvar",
-        description: error.message || "Não foi possível salvar o item",
+        description: errorMessage,
         variant: "destructive",
       });
     }
