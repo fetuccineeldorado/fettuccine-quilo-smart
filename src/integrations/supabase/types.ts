@@ -350,6 +350,63 @@ export type Database = {
         }
         Relationships: []
       }
+      inventory_movements: {
+        Row: {
+          created_at: string | null
+          id: string
+          moved_by: string | null
+          movement_type: string
+          notes: string | null
+          product_id: string
+          quantity: number
+          reference_id: string | null
+          reference_type: string | null
+          total_cost: number | null
+          unit_cost: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          moved_by?: string | null
+          movement_type: string
+          notes?: string | null
+          product_id: string
+          quantity: number
+          reference_id?: string | null
+          reference_type?: string | null
+          total_cost?: number | null
+          unit_cost?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          moved_by?: string | null
+          movement_type?: string
+          notes?: string | null
+          product_id?: string
+          quantity?: number
+          reference_id?: string | null
+          reference_type?: string | null
+          total_cost?: number | null
+          unit_cost?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_movements_moved_by_fkey"
+            columns: ["moved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_movements_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
           created_at: string
@@ -395,6 +452,7 @@ export type Database = {
         Row: {
           closed_at: string | null
           closed_by: string | null
+          customer_name: string | null
           extras_total: number
           food_total: number
           id: string
@@ -410,6 +468,7 @@ export type Database = {
         Insert: {
           closed_at?: string | null
           closed_by?: string | null
+          customer_name?: string | null
           extras_total?: number
           food_total?: number
           id?: string
@@ -425,6 +484,7 @@ export type Database = {
         Update: {
           closed_at?: string | null
           closed_by?: string | null
+          customer_name?: string | null
           extras_total?: number
           food_total?: number
           id?: string
