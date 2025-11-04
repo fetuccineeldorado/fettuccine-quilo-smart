@@ -47,7 +47,7 @@ class WhatsAppConnectionService {
       }
 
       // Verificar se a tabela existe
-      const { error: tableError } = await supabase
+      const { error: tableError } = await (supabase as any)
         .from('whatsapp_connections')
         .select('id')
         .limit(1);
@@ -63,7 +63,7 @@ class WhatsAppConnectionService {
       }
 
       // Verificar se já existe conexão
-      const { data: existing } = await supabase
+      const { data: existing } = await (supabase as any)
         .from('whatsapp_connections')
         .select('id')
         .eq('instance_id', instanceId)
@@ -73,7 +73,7 @@ class WhatsAppConnectionService {
 
       if (existing) {
         // Atualizar conexão existente
-        const { data, error } = await supabase
+        const { data, error } = await (supabase as any)
           .from('whatsapp_connections')
           .update({
             instance_name: instanceName,
@@ -91,7 +91,7 @@ class WhatsAppConnectionService {
         connectionId = data.id;
       } else {
         // Criar nova conexão
-        const { data, error } = await supabase
+        const { data, error } = await (supabase as any)
           .from('whatsapp_connections')
           .insert({
             instance_id: instanceId,
@@ -128,30 +128,59 @@ class WhatsAppConnectionService {
       const backendUrl = apiUrl || 'http://localhost:3001';
       const url = `${backendUrl}/api/whatsapp/qr/${instanceId}`;
       
+      console.log(`📱 Gerando QR Code para ${instanceId} em ${url}`);
+      
       const response = await fetch(url, {
         method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Erro HTTP ${response.status}`);
+        throw new Error(errorData.error || `Erro HTTP ${response.status}: ${response.statusText}`);
       }
 
       const data = await response.json();
 
-      if (!data.success || !data.qrCode) {
-        throw new Error('QR Code não encontrado na resposta');
+      // Se cliente já está conectado
+      if (data.connected && !data.qrCode) {
+        console.log('✅ Cliente já está conectado');
+        await this.updateConnectionStatus(instanceId, 'connected');
+        return {
+          success: true,
+          qrCode: undefined,
+          expiresAt: undefined
+        };
+      }
+
+      // Se não tem QR Code na resposta, verificar se é erro ou cliente já conectado
+      if (!data.qrCode) {
+        if (data.connected) {
+          // Cliente já está conectado, não precisa de QR Code
+          console.log('✅ Cliente já está conectado');
+          await this.updateConnectionStatus(instanceId, 'connected');
+          return {
+            success: true,
+            qrCode: undefined,
+            expiresAt: undefined
+          };
+        }
+        throw new Error(data.message || data.error || 'QR Code não foi gerado. Tente novamente.');
       }
 
       // QR Code já vem em base64 do servidor
       const qrCode = data.qrCode;
 
-      // Expiração padrão: 40 segundos (tempo típico do WhatsApp Web)
+      // Expiração padrão: 60 segundos (tempo típico do WhatsApp Web)
       const expiresAt = new Date();
-      expiresAt.setSeconds(expiresAt.getSeconds() + 40);
+      expiresAt.setSeconds(expiresAt.getSeconds() + 60);
 
       // Atualizar status no banco
       await this.updateConnectionStatus(instanceId, 'connecting', qrCode, expiresAt);
+
+      console.log('✅ QR Code gerado com sucesso');
 
       return {
         success: true,
@@ -159,10 +188,25 @@ class WhatsAppConnectionService {
         expiresAt
       };
     } catch (error: any) {
-      console.error('Erro ao gerar QR Code:', error);
+      console.error('❌ Erro ao gerar QR Code:', error);
+      
+      // Atualizar status de erro no banco
+      try {
+        await (supabase as any)
+          .from('whatsapp_connections')
+          .update({
+            status: 'error',
+            error_message: error.message,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('instance_id', instanceId);
+      } catch (dbError) {
+        console.error('Erro ao atualizar status de erro:', dbError);
+      }
+      
       return {
         success: false,
-        error: error.message || 'Erro ao gerar QR Code. Verifique se o servidor backend está rodando.'
+        error: error.message || 'Erro ao gerar QR Code. Verifique se o servidor backend está rodando em ' + (apiUrl || 'http://localhost:3001')
       };
     }
   }
@@ -196,7 +240,7 @@ class WhatsAppConnectionService {
       // Se está conectando mas ainda não tem info, manter como connecting
       if (!data.connected && status === 'disconnected') {
         // Verificar se há QR Code ativo (então está conectando)
-        const { data: connection } = await supabase
+        const { data: connection } = await (supabase as any)
           .from('whatsapp_connections')
           .select('qr_code, qr_code_expires_at')
           .eq('instance_id', instanceId)
@@ -211,7 +255,7 @@ class WhatsAppConnectionService {
       }
 
       // Atualizar status no banco
-      await supabase
+      await (supabase as any)
         .from('whatsapp_connections')
         .update({
           status,
@@ -272,7 +316,7 @@ class WhatsAppConnectionService {
    */
   async getCurrentConnection(): Promise<WhatsAppConnection | null> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('whatsapp_connections')
         .select('*')
         .eq('status', 'connected')
@@ -296,7 +340,7 @@ class WhatsAppConnectionService {
    */
   async getAllConnections(): Promise<WhatsAppConnection[]> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('whatsapp_connections')
         .select('*')
         .order('created_at', { ascending: false });
@@ -320,7 +364,7 @@ class WhatsAppConnectionService {
   /**
    * Atualizar status da conexão no banco
    */
-  private async updateConnectionStatus(
+  async updateConnectionStatus(
     instanceId: string,
     status: WhatsAppConnection['status'],
     qrCode?: string,
@@ -328,7 +372,7 @@ class WhatsAppConnectionService {
     errorMessage?: string
   ): Promise<void> {
     try {
-      await supabase
+      await (supabase as any)
         .from('whatsapp_connections')
         .update({
           status,

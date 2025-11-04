@@ -21,6 +21,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { WhatsAppDiagnostics } from "./WhatsAppDiagnostics";
 
 interface WhatsAppQRCodeProps {
   onConnected?: () => void;
@@ -37,10 +38,17 @@ const WhatsAppQRCode = ({ onConnected }: WhatsAppQRCodeProps) => {
     instanceId: 'default',
     instanceName: 'Instância Principal',
     provider: 'evolution' as 'evolution' | 'whatsapp-business' | 'custom',
-    apiUrl: '',
+    apiUrl: 'http://localhost:3001',
     apiKey: '',
   });
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  console.log('🔍 WhatsAppQRCode renderizado:', { 
+    connection: connection ? 'existe' : 'null',
+    showConfig,
+    loading,
+    connecting
+  });
 
   useEffect(() => {
     loadConnection();
@@ -69,6 +77,15 @@ const WhatsAppQRCode = ({ onConnected }: WhatsAppQRCodeProps) => {
         if (current.status === 'connecting') {
           startPolling();
         }
+        
+        // Se tem QR Code armazenado, exibir
+        if (current.qr_code && current.qr_code_expires_at) {
+          const expiresAt = new Date(current.qr_code_expires_at);
+          if (expiresAt > new Date()) {
+            setQrCode(current.qr_code);
+            startPolling();
+          }
+        }
       }
     } catch (error) {
       console.error('Erro ao carregar conexão:', error);
@@ -79,6 +96,7 @@ const WhatsAppQRCode = ({ onConnected }: WhatsAppQRCodeProps) => {
           title: "Migração necessária",
           description: "A tabela whatsapp_connections não existe. Aplique a migração SQL primeiro.",
           variant: "destructive",
+          duration: 10000,
         });
       }
     }
@@ -150,6 +168,8 @@ const WhatsAppQRCode = ({ onConnected }: WhatsAppQRCodeProps) => {
     try {
       // Verificar se o servidor está respondendo
       const healthUrl = connection.api_url.replace(/\/$/, '') + '/health';
+      console.log('🔍 Verificando servidor em:', healthUrl);
+      
       try {
         const healthCheck = await fetch(healthUrl, {
           method: 'GET',
@@ -159,38 +179,72 @@ const WhatsAppQRCode = ({ onConnected }: WhatsAppQRCodeProps) => {
         if (!healthCheck.ok) {
           throw new Error(`Servidor não está respondendo (${healthCheck.status})`);
         }
+        console.log('✅ Servidor está respondendo');
       } catch (healthError: any) {
         if (healthError.name === 'AbortError' || healthError.message.includes('fetch')) {
-          throw new Error(`Servidor backend não está rodando em ${connection.api_url}. Inicie o servidor primeiro (cd server && npm start)`);
+          throw new Error(`Servidor backend não está rodando em ${connection.api_url}. Inicie o servidor primeiro:\n\ncd server\nnpm start`);
         }
         throw healthError;
       }
 
+      console.log('📱 Gerando QR Code...');
+      console.log('📋 Dados da conexão:', {
+        instanceId: connection.instance_id,
+        apiUrl: connection.api_url,
+        hasApiKey: !!connection.api_key
+      });
+      
       const result = await whatsappConnectionService.generateQRCode(
         connection.instance_id,
         connection.api_url!,
         connection.api_key || ''
       );
+      
+      console.log('📊 Resultado da geração:', result);
 
-      if (result.success && result.qrCode) {
-        setQrCode(result.qrCode);
-        
-        // Iniciar polling para verificar status
-        startPolling();
+      if (result.success) {
+        if (result.qrCode) {
+          console.log('✅ QR Code recebido! Tamanho:', result.qrCode.length);
+          console.log('📱 Atualizando status da conexão para "connecting"');
+          
+          // IMPORTANTE: Atualizar status da conexão no Supabase
+          await whatsappConnectionService.updateConnectionStatus(
+            connection.instance_id,
+            'connecting',
+            result.qrCode
+          );
+          
+          setQrCode(result.qrCode);
+          
+          // Recarregar conexão para pegar o novo status
+          await loadConnection();
+          
+          // Iniciar polling para verificar status
+          startPolling();
 
-        toast({
-          title: "QR Code gerado",
-          description: "Escaneie o QR Code com seu WhatsApp",
-        });
+          toast({
+            title: "QR Code gerado com sucesso!",
+            description: "Escaneie o QR Code com seu WhatsApp para conectar",
+            duration: 5000,
+          });
+        } else {
+          // Cliente já está conectado
+          await loadConnection();
+          toast({
+            title: "WhatsApp já está conectado!",
+            description: "A conexão já está ativa",
+          });
+        }
       } else {
         throw new Error(result.error || 'Erro ao gerar QR Code');
       }
     } catch (error: any) {
-      console.error('Erro detalhado ao gerar QR Code:', error);
+      console.error('❌ Erro detalhado ao gerar QR Code:', error);
       toast({
         title: "Erro ao gerar QR Code",
         description: error.message || "Não foi possível gerar o QR Code. Verifique se o servidor está rodando.",
         variant: "destructive",
+        duration: 7000,
       });
     } finally {
       setConnecting(false);
@@ -303,30 +357,137 @@ const WhatsAppQRCode = ({ onConnected }: WhatsAppQRCodeProps) => {
 
   if (!connection) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            Configurar WhatsApp
-          </CardTitle>
-          <CardDescription>
-            Configure a conexão com o WhatsApp para enviar mensagens
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Button onClick={() => setShowConfig(true)}>
-            <Settings className="h-4 w-4 mr-2" />
-            Configurar Conexão
-          </Button>
-          <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-            <p className="text-xs text-yellow-900">
-              <strong>Importante:</strong> Se você está vendo erros sobre tabela não encontrada, 
-              é necessário aplicar a migração SQL primeiro. Execute o arquivo: 
-              <code className="bg-yellow-100 px-1 rounded">supabase/migrations/20250101000004_create_whatsapp_connection.sql</code>
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      <>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Conectar WhatsApp Business
+            </CardTitle>
+            <CardDescription>
+              Configure e conecte seu WhatsApp Business para enviar mensagens aos clientes
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 space-y-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-blue-900 mb-2">
+                    Primeiros passos para conectar seu WhatsApp Business:
+                  </p>
+                  <ol className="text-xs text-blue-800 space-y-1 ml-4 list-decimal">
+                    <li>Verifique se o servidor backend está rodando na porta 3001</li>
+                    <li>Aplique a migração SQL no Supabase (se ainda não fez)</li>
+                    <li>Configure a conexão clicando no botão abaixo</li>
+                    <li>Use a URL: <code className="bg-blue-100 px-1 rounded">http://localhost:3001</code></li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+
+            <Button
+              onClick={() => setShowConfig(true)}
+              size="lg"
+              className="w-full"
+            >
+              <Settings className="h-4 w-4 mr-2" />
+              Configurar Conexão WhatsApp
+            </Button>
+
+            <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+              <p className="text-xs text-yellow-900">
+                <strong>⚠️ Tabela não encontrada?</strong> Aplique a migração SQL no Supabase:
+                <br />
+                <code className="bg-yellow-100 px-1 rounded text-[10px] block mt-1">
+                  supabase/migrations/20250101000004_create_whatsapp_connection.sql
+                </code>
+              </p>
+            </div>
+
+            <WhatsAppDiagnostics />
+          </CardContent>
+        </Card>
+
+        <Dialog open={showConfig} onOpenChange={setShowConfig}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Configurar Conexão WhatsApp</DialogTitle>
+              <DialogDescription>
+                Configure os dados da sua API de WhatsApp
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="instanceId">ID da Instância</Label>
+                <Input
+                  id="instanceId"
+                  value={config.instanceId}
+                  onChange={(e) => setConfig(prev => ({ ...prev, instanceId: e.target.value }))}
+                  placeholder="default"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="instanceName">Nome da Instância</Label>
+                <Input
+                  id="instanceName"
+                  value={config.instanceName}
+                  onChange={(e) => setConfig(prev => ({ ...prev, instanceName: e.target.value }))}
+                  placeholder="Instância Principal"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="apiUrl">URL do Servidor Backend *</Label>
+                <Input
+                  id="apiUrl"
+                  value={config.apiUrl}
+                  onChange={(e) => setConfig(prev => ({ ...prev, apiUrl: e.target.value }))}
+                  placeholder="http://localhost:3001"
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  URL do servidor WhatsApp Web.js (padrão: http://localhost:3001)
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="apiKey">Chave (Opcional)</Label>
+                <Input
+                  id="apiKey"
+                  type="password"
+                  value={config.apiKey}
+                  onChange={(e) => setConfig(prev => ({ ...prev, apiKey: e.target.value }))}
+                  placeholder="Deixe em branco se não usar autenticação"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Deixe em branco se o servidor não requer autenticação
+                </p>
+              </div>
+
+              <div className="p-3 bg-blue-50 rounded-lg">
+                <p className="text-xs text-blue-900">
+                  <strong>Como configurar:</strong>
+                  <br />1. Instale as dependências: <code>cd server && npm install</code>
+                  <br />2. Inicie o servidor: <code>npm start</code>
+                  <br />3. O servidor rodará na porta 3001 (ou configure outra porta)
+                  <br />4. Configure esta URL acima (ex: http://localhost:3001)
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowConfig(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleCreateConnection} disabled={loading}>
+                  {loading ? "Salvando..." : "Salvar Configuração"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </>
     );
   }
 
@@ -374,42 +535,79 @@ const WhatsAppQRCode = ({ onConnected }: WhatsAppQRCodeProps) => {
 
           {connection.status === 'connecting' && qrCode && (
             <div className="space-y-4">
-              <div className="text-center">
-                <p className="text-sm font-medium mb-2">Escaneie o QR Code com seu WhatsApp</p>
-                <div className="flex justify-center p-4 bg-white rounded-lg border-2 border-dashed">
-                  <img
-                    src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`}
-                    alt="QR Code WhatsApp"
-                    className="w-64 h-64"
-                    onError={(e) => {
-                      console.error('Erro ao carregar QR Code');
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  1. Abra o WhatsApp no seu celular
-                  <br />
-                  2. Vá em Configurações → Aparelhos conectados
-                  <br />
-                  3. Toque em "Conectar um aparelho"
-                  <br />
-                  4. Escaneie este código
+              <div className="p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border-2 border-green-200">
+                <p className="text-sm font-semibold text-center mb-3 text-green-900">
+                  📱 Escaneie o QR Code com seu WhatsApp Business
                 </p>
+                <div className="flex justify-center p-4 bg-white rounded-lg shadow-md">
+                  {qrCode ? (
+                    <img
+                      src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`}
+                      alt="QR Code WhatsApp"
+                      className="w-64 h-64"
+                      onError={(e) => {
+                        console.error('❌ Erro ao carregar QR Code:', qrCode.substring(0, 50));
+                        e.currentTarget.style.display = 'none';
+                        toast({
+                          title: "Erro ao exibir QR Code",
+                          description: "O QR Code não pôde ser exibido. Tente gerar novamente.",
+                          variant: "destructive",
+                        });
+                      }}
+                    />
+                  ) : (
+                    <div className="w-64 h-64 flex items-center justify-center text-muted-foreground">
+                      QR Code não disponível
+                    </div>
+                  )}
+                </div>
+                <div className="mt-3 p-3 bg-white/50 rounded-lg">
+                  <p className="text-xs text-gray-700 space-y-1">
+                    <span className="block font-semibold text-green-800">Como escanear:</span>
+                    <span className="block">1️⃣ Abra o <strong>WhatsApp Business</strong> no seu celular</span>
+                    <span className="block">2️⃣ Toque nos <strong>3 pontinhos</strong> (menu)</span>
+                    <span className="block">3️⃣ Selecione <strong>Aparelhos conectados</strong></span>
+                    <span className="block">4️⃣ Toque em <strong>Conectar um aparelho</strong></span>
+                    <span className="block">5️⃣ <strong>Escaneie este QR Code</strong></span>
+                  </p>
+                </div>
+                <div className="mt-2 p-2 bg-yellow-50 rounded border border-yellow-200">
+                  <p className="text-xs text-yellow-800 text-center">
+                    ⚠️ <strong>O QR Code expira em 60 segundos!</strong> Se expirar, gere um novo.
+                  </p>
+                </div>
               </div>
-              <div className="flex justify-center">
+              <div className="flex justify-center items-center gap-2 py-2">
                 <RefreshCw className="h-4 w-4 animate-spin text-primary" />
-                <span className="ml-2 text-sm text-muted-foreground">Aguardando conexão...</span>
+                <span className="text-sm text-muted-foreground font-medium">
+                  Aguardando você escanear o QR Code...
+                </span>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleGenerateQR}
-                className="w-full"
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Gerar Novo QR Code
-              </Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateQR}
+                  className="border-green-300 hover:bg-green-50"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Gerar Novo QR Code
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (pollingIntervalRef.current) {
+                      clearInterval(pollingIntervalRef.current);
+                      pollingIntervalRef.current = null;
+                    }
+                    setQrCode(null);
+                    setConnecting(false);
+                  }}
+                >
+                  Cancelar
+                </Button>
+              </div>
             </div>
           )}
           
@@ -435,15 +633,41 @@ const WhatsAppQRCode = ({ onConnected }: WhatsAppQRCodeProps) => {
           )}
 
           {connection.status === 'disconnected' && (
-            <div className="text-center py-4">
+            <div className="text-center py-4 space-y-4">
               <XCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
               <p className="text-sm text-muted-foreground mb-4">
                 WhatsApp não está conectado
               </p>
-              <Button onClick={handleGenerateQR} disabled={connecting}>
-                <QrCode className="h-4 w-4 mr-2" />
-                {connecting ? "Gerando QR Code..." : "Conectar WhatsApp"}
+              {!connection.api_url && (
+                <div className="mb-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                  <p className="text-xs text-yellow-900">
+                    ⚠️ URL do servidor não configurada. Configure primeiro!
+                  </p>
+                </div>
+              )}
+              <Button 
+                onClick={handleGenerateQR} 
+                disabled={connecting || !connection.api_url}
+                size="lg"
+                className="w-full"
+              >
+                {connecting ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Gerando QR Code...
+                  </>
+                ) : (
+                  <>
+                    <QrCode className="h-4 w-4 mr-2" />
+                    Conectar WhatsApp
+                  </>
+                )}
               </Button>
+              {connecting && (
+                <p className="text-xs text-muted-foreground">
+                  Aguardando servidor gerar QR Code... Isso pode levar alguns segundos.
+                </p>
+              )}
             </div>
           )}
 
@@ -459,46 +683,54 @@ const WhatsAppQRCode = ({ onConnected }: WhatsAppQRCodeProps) => {
             </div>
           )}
 
-          <div className="flex gap-2 pt-4 border-t">
-            <Button
-              variant="outline"
-              onClick={() => setShowConfig(true)}
-            >
-              <Settings className="h-4 w-4 mr-2" />
-              Editar Configuração
-            </Button>
-            {connection.status === 'connected' && (
-              <Button
-                variant="destructive"
-                onClick={handleDisconnect}
-                disabled={loading}
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                Desconectar
-              </Button>
-            )}
-            {connection.status === 'connecting' && (
+          <div className="space-y-4 pt-4 border-t">
+            <div className="flex gap-2">
               <Button
                 variant="outline"
-                onClick={() => {
-                  if (pollingIntervalRef.current) {
-                    clearInterval(pollingIntervalRef.current);
-                    pollingIntervalRef.current = null;
-                  }
-                  setQrCode(null);
-                  setConnecting(false);
-                }}
+                onClick={() => setShowConfig(true)}
+                disabled={loading}
               >
-                Cancelar
+                <Settings className="h-4 w-4 mr-2" />
+                Editar Configuração
               </Button>
-            )}
+              {connection.status === 'connected' && (
+                <Button
+                  variant="destructive"
+                  onClick={handleDisconnect}
+                  disabled={loading}
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Desconectar
+                </Button>
+              )}
+              {connection.status === 'connecting' && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (pollingIntervalRef.current) {
+                      clearInterval(pollingIntervalRef.current);
+                      pollingIntervalRef.current = null;
+                    }
+                    setQrCode(null);
+                    setConnecting(false);
+                  }}
+                >
+                  Cancelar
+                </Button>
+              )}
+            </div>
+            
+            <WhatsAppDiagnostics />
           </div>
         </CardContent>
       </Card>
 
       {/* Dialog de Configuração */}
-      <Dialog open={showConfig} onOpenChange={setShowConfig}>
-        <DialogContent>
+      <Dialog open={showConfig} onOpenChange={(open) => {
+        console.log('🔄 Dialog onOpenChange:', open);
+        setShowConfig(open);
+      }}>
+        <DialogContent onOpenAutoFocus={() => console.log('🎯 Dialog foi renderizado e focado!')}>
           <DialogHeader>
             <DialogTitle>Configurar Conexão WhatsApp</DialogTitle>
             <DialogDescription>

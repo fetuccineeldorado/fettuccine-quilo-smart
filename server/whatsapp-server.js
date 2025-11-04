@@ -92,78 +92,112 @@ function createWhatsAppClient(instanceId) {
 app.get('/api/whatsapp/qr/:instanceId', async (req, res) => {
   try {
     const { instanceId } = req.params;
+    console.log(`📱 Solicitando QR Code para instância: ${instanceId}`);
+    
     let client = clients.get(instanceId);
 
-    // Se cliente já existe e está inicializado, verificar se já está conectado
+    // Se cliente já existe e está conectado, retornar info
     if (client && client.info) {
+      console.log(`✅ Cliente ${instanceId} já está conectado`);
       return res.json({ 
         success: true, 
         qrCode: null,
         message: 'Cliente já está conectado',
-        connected: true
+        connected: true,
+        phoneNumber: client.info.wid?.user,
+        phoneName: client.info.pushname
       });
     }
 
-    // Criar ou obter cliente
+    // Se cliente existe mas não está conectado, destruir e recriar
+    if (client && !client.info) {
+      console.log(`🔄 Cliente ${instanceId} existe mas não está conectado. Recriando...`);
+      try {
+        await client.destroy();
+      } catch (e) {
+        console.warn('Erro ao destruir cliente antigo:', e.message);
+      }
+      clients.delete(instanceId);
+      clients.delete(`${instanceId}_qr`);
+      clients.delete(`${instanceId}_info`);
+    }
+
+    // Criar novo cliente
+    console.log(`🆕 Criando novo cliente para ${instanceId}`);
     client = createWhatsAppClient(instanceId);
 
-    // Se já está inicializando, aguardar
-    if (client.pupPage && !client.info) {
-      // Aguardar um pouco antes de gerar novo QR
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
+    // Limpar QR Code antigo
+    clients.delete(`${instanceId}_qr`);
 
-    // Inicializar cliente se necessário
-    if (!client.pupPage) {
-      await client.initialize();
-    }
-
-    // Verificar se já tem QR Code armazenado
-    const storedQR = clients.get(`${instanceId}_qr`);
-    if (storedQR) {
-      return res.json({ success: true, qrCode: storedQR });
-    }
-
-    // Aguardar QR Code (máximo 40 segundos)
+    // Aguardar QR Code (máximo 60 segundos)
     const qrCode = await new Promise((resolve, reject) => {
+      let qrReceived = false;
       const timeout = setTimeout(() => {
-        reject(new Error('Timeout ao gerar QR Code. Tente novamente.'));
-      }, 40000);
+        if (!qrReceived) {
+          client.removeAllListeners('qr');
+          client.removeAllListeners('ready');
+          reject(new Error('Timeout ao gerar QR Code. Aguarde e tente novamente.'));
+        }
+      }, 60000);
 
-      // Se já tem um QR Code armazenado, usar ele
-      const storedQR = clients.get(`${instanceId}_qr`);
-      if (storedQR) {
-        clearTimeout(timeout);
-        resolve(storedQR);
-        return;
-      }
-
-      // Listener para novo QR Code
+      // Listener para QR Code
       const qrHandler = async (qr) => {
+        if (qrReceived) return;
+        qrReceived = true;
         try {
           clearTimeout(timeout);
-          client.removeListener('qr', qrHandler);
+          console.log(`✅ QR Code recebido para ${instanceId}`);
           const qrCodeBase64 = await qrcode.toDataURL(qr);
           clients.set(`${instanceId}_qr`, qrCodeBase64);
+          // Limpar após 60 segundos
+          setTimeout(() => {
+            clients.delete(`${instanceId}_qr`);
+          }, 60000);
+          client.removeListener('ready', readyHandler);
           resolve(qrCodeBase64);
         } catch (error) {
+          client.removeListener('ready', readyHandler);
           reject(error);
         }
       };
 
-      client.on('qr', qrHandler);
-
-      // Se cliente já está pronto, não precisa de QR
-      if (client.info) {
+      // Listener para quando cliente já está pronto (já conectado)
+      const readyHandler = () => {
+        if (qrReceived) return;
+        qrReceived = true;
         clearTimeout(timeout);
+        console.log(`✅ Cliente ${instanceId} já está pronto (conectado)`);
         client.removeListener('qr', qrHandler);
         resolve(null);
-      }
+      };
+
+      client.on('qr', qrHandler);
+      client.on('ready', readyHandler);
+
+      // Inicializar cliente
+      console.log(`🚀 Inicializando cliente ${instanceId}...`);
+      client.initialize().catch((err) => {
+        console.error(`❌ Erro ao inicializar cliente ${instanceId}:`, err);
+        if (!qrReceived) {
+          qrReceived = true;
+          clearTimeout(timeout);
+          client.removeAllListeners('qr');
+          client.removeAllListeners('ready');
+          reject(new Error(`Erro ao inicializar cliente: ${err.message || 'Erro desconhecido'}`));
+        }
+      });
+      
+      // Timeout adicional para inicialização
+      setTimeout(() => {
+        if (!qrReceived && !client.pupPage) {
+          console.warn(`⚠️ Cliente ${instanceId} ainda não inicializou após 10 segundos`);
+        }
+      }, 10000);
     });
 
     res.json({ success: true, qrCode });
   } catch (error) {
-    console.error('Erro ao gerar QR Code:', error);
+    console.error('❌ Erro ao gerar QR Code:', error);
     res.status(500).json({ 
       success: false, 
       error: error.message || 'Erro desconhecido ao gerar QR Code'
@@ -258,6 +292,23 @@ app.post('/api/whatsapp/send', async (req, res) => {
   }
 });
 
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    name: 'WhatsApp Web.js Backend',
+    version: '1.0.0',
+    status: 'online',
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      health: 'GET /health',
+      qrCode: 'GET /api/whatsapp/qr/:instanceId',
+      status: 'GET /api/whatsapp/status/:instanceId',
+      send: 'POST /api/whatsapp/send',
+      disconnect: 'DELETE /api/whatsapp/disconnect/:instanceId'
+    }
+  });
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -265,7 +316,10 @@ app.get('/health', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Servidor WhatsApp rodando na porta ${PORT}`);
+  console.log(`📱 Acesse: http://localhost:${PORT}`);
   console.log(`📱 Endpoints disponíveis:`);
+  console.log(`   GET  /`);
+  console.log(`   GET  /health`);
   console.log(`   GET  /api/whatsapp/qr/:instanceId`);
   console.log(`   GET  /api/whatsapp/status/:instanceId`);
   console.log(`   DELETE /api/whatsapp/disconnect/:instanceId`);

@@ -1,5 +1,5 @@
 // Service Worker para Fettuccine PDV
-const CACHE_NAME = 'fettuccine-pdv-v1';
+const CACHE_NAME = 'fettuccine-pdv-v2'; // Incrementar versão para forçar limpeza
 const urlsToCache = [
   '/',
   '/dashboard',
@@ -37,14 +37,18 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('Service Worker: Removendo cache antigo:', cacheName);
-            return caches.delete(cacheName);
-          }
+          // Limpar TODOS os caches antigos
+          console.log('Service Worker: Removendo cache:', cacheName);
+          return caches.delete(cacheName);
         })
-      );
+      ).then(() => {
+        // Limpar cache atual também e recriar
+        return caches.delete(CACHE_NAME);
+      });
     })
   );
+  // Forçar controle imediato
+  return self.clients.claim();
 });
 
 // Interceptar requisições
@@ -151,5 +155,24 @@ self.addEventListener('message', (event) => {
   
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
+  }
+  
+  // Comando para limpar todo o cache
+  if (event.data && event.data.type === 'CLEAR_CACHE') {
+    console.log('Service Worker: Limpando todo o cache...');
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          console.log('Service Worker: Removendo cache:', cacheName);
+          return caches.delete(cacheName);
+        })
+      );
+    }).then(() => {
+      console.log('Service Worker: Cache limpo com sucesso!');
+      event.ports[0].postMessage({ success: true });
+    }).catch((error) => {
+      console.error('Service Worker: Erro ao limpar cache:', error);
+      event.ports[0].postMessage({ success: false, error: error.message });
+    });
   }
 });

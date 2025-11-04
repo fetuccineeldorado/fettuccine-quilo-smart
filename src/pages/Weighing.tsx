@@ -618,7 +618,7 @@ const Weighing = () => {
           unit_price: item.price,
           total_price: item.price * item.quantity,
         }));
-
+      
       // Debug dos dados antes da impressão
       ThermalPrinter.debugPrintData(
         order, 
