@@ -1,0 +1,28 @@
+{
+  "name": "whatsapp-server",
+  "version": "1.0.0",
+  "description": "Servidor backend para WhatsApp Web.js",
+  "main": "whatsapp-server.js",
+  "scripts": {
+    "start": "node whatsapp-server.js",
+    "dev": "nodemon whatsapp-server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "whatsapp-web.js": "^1.23.0",
+    "qrcode": "^1.5.3",
+    "puppeteer": "^21.5.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "keywords": [
+    "whatsapp",
+    "whatsapp-web",
+    "qrcode"
+  ],
+  "author": "",
+  "license": "MIT"
+}
+

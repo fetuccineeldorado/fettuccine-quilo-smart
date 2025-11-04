@@ -17,7 +17,8 @@ import {
   Menu,
   X,
   ShoppingCart,
-  DollarSign
+  DollarSign,
+  Megaphone
 } from "lucide-react";
 import { Session } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
@@ -71,6 +72,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     { path: "/dashboard/reports", icon: BarChart3, label: "Relatórios" },
     { path: "/dashboard/inventory", icon: Package, label: "Estoque" },
     { path: "/dashboard/customers", icon: Users, label: "Clientes" },
+    { path: "/dashboard/promotions", icon: Megaphone, label: "Promoções" },
     { path: "/dashboard/employees", icon: UserPlus, label: "Funcionários" },
     // TODO: Criar página de gestão de itens extras
     // { path: "/dashboard/extra-items", icon: ShoppingCart, label: "Itens Extras" },

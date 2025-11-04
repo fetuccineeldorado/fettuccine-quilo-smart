@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,9 @@ interface Order {
 }
 
 const Cashier = () => {
+  console.log('🎯🎯🎯 COMPONENTE CASHIER INICIADO! 🎯🎯🎯');
+  console.log('🎯 Cashier: Componente sendo renderizado agora!');
+  
   const { toast } = useToast();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -27,33 +30,314 @@ const Cashier = () => {
   const [paymentMethod, setPaymentMethod] = useState<string>("");
   const [amountReceived, setAmountReceived] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+  
+  // Refs para acessar valores atuais sem causar re-renders
+  const ordersRef = useRef(orders);
+  const selectedOrderRef = useRef(selectedOrder);
+  
+  // Atualizar refs quando estado muda
+  useEffect(() => {
+    ordersRef.current = orders;
+  }, [orders]);
+  
+  useEffect(() => {
+    selectedOrderRef.current = selectedOrder;
+  }, [selectedOrder]);
 
   useEffect(() => {
-    fetchOpenOrders();
-  }, []);
+    console.log('🚀🚀🚀 Cashier: Componente montado! 🚀🚀🚀');
+    console.log('🚀 Cashier: Componente montado, iniciando busca de comandas...');
+    console.log('🚀 Cashier: Timestamp:', new Date().toISOString());
+    
+    // Garantir que fetchOpenOrders seja chamada
+    const loadOrders = async () => {
+      try {
+        await fetchOpenOrders();
+      } catch (error) {
+        console.error('💥 Erro ao chamar fetchOpenOrders:', error);
+      }
+    };
+    
+    loadOrders();
+
+    // Real-time subscription para atualizações automáticas de comandas
+    const ordersChannel = supabase
+      .channel("cashier-orders-changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "orders",
+        },
+        (payload) => {
+          console.log("🔄 Atualização de comanda detectada:", payload.eventType, payload.new);
+          
+          // Se foi INSERT ou UPDATE, atualizar a lista
+          if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+            const updatedOrder = payload.new as Order;
+            
+            // Se a comanda foi fechada (status mudou para "closed"), remover da lista
+            if (updatedOrder.status === "closed") {
+              setOrders(prev => prev.filter(o => o.id !== updatedOrder.id));
+              
+              // Se a comanda selecionada foi fechada, limpar seleção
+              if (selectedOrderRef.current?.id === updatedOrder.id) {
+                setSelectedOrder(null);
+                setPaymentMethod("");
+                setAmountReceived("");
+                toast({
+                  title: "Comanda fechada",
+                  description: `A comanda #${updatedOrder.order_number} foi fechada.`,
+                });
+              }
+            } else {
+              // Atualizar ou adicionar comanda na lista
+              setOrders(prev => {
+                const existingIndex = prev.findIndex(o => o.id === updatedOrder.id);
+                if (existingIndex >= 0) {
+                  // Atualizar comanda existente
+                  const updated = [...prev];
+                  updated[existingIndex] = updatedOrder;
+                  
+                  // Se a comanda selecionada foi atualizada, atualizar também
+                  if (selectedOrderRef.current?.id === updatedOrder.id) {
+                    setSelectedOrder(updatedOrder);
+                  }
+                  
+                  return updated;
+                } else {
+                  // Adicionar nova comanda (se for "open" ou "pending")
+                  if (updatedOrder.status === "open" || updatedOrder.status === "pending") {
+                    return [...prev, updatedOrder].sort((a, b) => b.order_number - a.order_number);
+                  }
+                  return prev;
+                }
+              });
+              
+              // Feedback visual para atualizações
+              if (payload.eventType === "UPDATE" && selectedOrderRef.current?.id === updatedOrder.id) {
+                toast({
+                  title: "Comanda atualizada",
+                  description: "Os valores da comanda foram atualizados automaticamente.",
+                  duration: 2000,
+                });
+              }
+            }
+          } else if (payload.eventType === "DELETE") {
+            // Remover comanda deletada da lista
+            const deletedOrder = payload.old as Order;
+            setOrders(prev => prev.filter(o => o.id !== deletedOrder.id));
+            
+            // Se a comanda selecionada foi deletada, limpar seleção
+            if (selectedOrderRef.current?.id === deletedOrder.id) {
+              setSelectedOrder(null);
+              setPaymentMethod("");
+              setAmountReceived("");
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log("📡 Status da subscription de comandas:", status);
+      });
+
+    // Subscription para mudanças em order_items que podem afetar totais
+    const orderItemsChannel = supabase
+      .channel("cashier-order-items-changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "order_items",
+        },
+        async (payload) => {
+          console.log("🔄 Mudança em itens de comanda detectada:", payload.eventType);
+          
+          // Quando há mudança em order_items, buscar comanda atualizada
+          if (payload.new && "order_id" in payload.new) {
+            const orderId = payload.new.order_id as string;
+            
+            // Verificar se a comanda está na lista de comandas abertas
+            const orderInList = ordersRef.current.find(o => o.id === orderId);
+            if (orderInList) {
+              // Buscar dados atualizados da comanda
+              const { data: updatedOrder, error } = await supabase
+                .from("orders")
+                .select("id, order_number, total_amount, total_weight, status, customer_name")
+                .eq("id", orderId)
+                .single();
+              
+              if (!error && updatedOrder) {
+                // Atualizar comanda na lista
+                setOrders(prev => {
+                  const updated = prev.map(o => 
+                    o.id === orderId ? updatedOrder : o
+                  );
+                  return updated;
+                });
+                
+                // Atualizar comanda selecionada se for a mesma
+                if (selectedOrderRef.current?.id === orderId) {
+                  setSelectedOrder(updatedOrder);
+                  toast({
+                    title: "Comanda atualizada",
+                    description: "Os itens da comanda foram atualizados.",
+                    duration: 2000,
+                  });
+                }
+              }
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // Subscription para mudanças em order_extra_items
+    const orderExtraItemsChannel = supabase
+      .channel("cashier-order-extra-items-changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "order_extra_items",
+        },
+        async (payload) => {
+          console.log("🔄 Mudança em itens extras de comanda detectada:", payload.eventType);
+          
+          // Quando há mudança em order_extra_items, buscar comanda atualizada
+          if (payload.new && "order_id" in payload.new) {
+            const orderId = payload.new.order_id as string;
+            
+            // Verificar se a comanda está na lista de comandas abertas
+            const orderInList = ordersRef.current.find(o => o.id === orderId);
+            if (orderInList) {
+              // Buscar dados atualizados da comanda
+              const { data: updatedOrder, error } = await supabase
+                .from("orders")
+                .select("id, order_number, total_amount, total_weight, status, customer_name")
+                .eq("id", orderId)
+                .single();
+              
+              if (!error && updatedOrder) {
+                // Atualizar comanda na lista
+                setOrders(prev => {
+                  const updated = prev.map(o => 
+                    o.id === orderId ? updatedOrder : o
+                  );
+                  return updated;
+                });
+                
+                // Atualizar comanda selecionada se for a mesma
+                if (selectedOrderRef.current?.id === orderId) {
+                  setSelectedOrder(updatedOrder);
+                  toast({
+                    title: "Comanda atualizada",
+                    description: "Os itens extras da comanda foram atualizados.",
+                    duration: 2000,
+                  });
+                }
+              }
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // Cleanup: remover subscriptions quando componente desmontar
+    return () => {
+      supabase.removeChannel(ordersChannel);
+      supabase.removeChannel(orderItemsChannel);
+      supabase.removeChannel(orderExtraItemsChannel);
+    };
+  }, [toast]); // Removido orders e selectedOrder das dependências para evitar loops
 
   const fetchOpenOrders = async () => {
+    console.log('🚀🚀🚀 fetchOpenOrders CHAMADA! 🚀🚀🚀');
+    console.log('🚀🚀🚀 Stack trace:', new Error().stack);
+    setLoadingOrders(true);
     try {
-      // Corrigido: buscar comandas "open" e "pending" (em edição)
-      const { data, error } = await supabase
-        .from("orders")
-        .select("id, order_number, total_amount, total_weight, status, customer_name")
-        .in("status", ["open", "pending"])
-        .order("order_number", { ascending: false });
-
-      if (error) {
-        console.error('Erro ao carregar comandas abertas:', error);
+      console.log('🔄 Cashier: Buscando comandas abertas...');
+      console.log('🔄 Cashier: Timestamp:', new Date().toISOString());
+      console.log('🔄 Cashier: Supabase client:', !!supabase);
+      
+      // Verificar sessão antes de buscar comandas
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        console.error('❌ Cashier: Erro de autenticação:', sessionError);
         toast({
-          title: "Erro ao carregar comandas",
-          description: error.message,
+          title: "Erro de autenticação",
+          description: "Por favor, faça login novamente.",
           variant: "destructive",
         });
         setOrders([]);
-      } else {
-        setOrders(data || []);
+        return;
       }
+      
+      console.log('✅ Cashier: Sessão válida, buscando comandas...');
+      
+      // Buscar comandas "open" primeiro (sempre disponível)
+      const { data: openData, error: openError } = await supabase
+        .from("orders")
+        .select("id, order_number, total_amount, total_weight, status, customer_name")
+        .eq("status", "open")
+        .order("order_number", { ascending: false });
+
+      if (openError) {
+        console.error('❌ Cashier: Erro ao buscar comandas "open":', openError);
+        throw openError;
+      }
+      
+      console.log('✅ Cashier: Comandas "open" encontradas:', openData?.length || 0);
+      if (openData && openData.length > 0) {
+        console.log('📋 Cashier: IDs das comandas "open":', openData.map(o => ({ id: o.id, number: o.order_number, total: o.total_amount })));
+      }
+
+      // Tentar buscar comandas "pending" (pode não existir se migração não foi aplicada)
+      let pendingData: typeof openData = [];
+      try {
+        const { data: pending, error: pendingError } = await supabase
+          .from("orders")
+          .select("id, order_number, total_amount, total_weight, status, customer_name")
+          .eq("status", "pending" as any)
+          .order("order_number", { ascending: false });
+        
+        if (!pendingError && pending) {
+          pendingData = pending;
+          console.log('✅ Cashier: Comandas "pending" encontradas:', pending.length);
+        } else if (pendingError) {
+          console.log('⚠️ Cashier: Status "pending" não disponível ou erro:', pendingError.message);
+        }
+      } catch (pendingErr) {
+        // Se "pending" não existe no enum, ignorar o erro e continuar apenas com "open"
+        console.log('⚠️ Cashier: Status "pending" não disponível no banco. Continuando apenas com comandas "open".');
+      }
+
+      // Combinar resultados
+      const allOrders = [...(openData || []), ...(pendingData || [])];
+      
+      console.log('📊 Cashier: Total de comandas antes de remover duplicatas:', allOrders.length);
+      
+      // Remover duplicatas (caso existam)
+      const uniqueOrders = allOrders.filter((order, index, self) =>
+        index === self.findIndex(o => o.id === order.id)
+      );
+
+      console.log('✅ Cashier: Total de comandas únicas:', uniqueOrders.length);
+      if (uniqueOrders.length > 0) {
+        console.log('📋 Cashier: Comandas que serão exibidas:', uniqueOrders.map(o => ({ number: o.order_number, total: o.total_amount })));
+      } else {
+        console.log('⚠️ Cashier: Nenhuma comanda aberta encontrada!');
+      }
+
+      setOrders(uniqueOrders);
+
     } catch (err) {
-      console.error('Erro geral ao carregar comandas abertas:', err);
+      console.error('💥 Cashier: Erro geral ao carregar comandas abertas:', err);
       
       // Tratamento específico de erros
       let errorMessage = "Erro desconhecido";
@@ -73,6 +357,8 @@ const Cashier = () => {
         variant: "destructive",
       });
       setOrders([]);
+    } finally {
+      setLoadingOrders(false);
     }
   };
 
@@ -318,38 +604,52 @@ const Cashier = () => {
                 Selecionar Comanda
               </CardTitle>
               <CardDescription>
-                {orders.length} comanda{orders.length !== 1 ? "s" : ""} aberta{orders.length !== 1 ? "s" : ""}
+                {loadingOrders ? "Carregando..." : `${orders.length} comanda${orders.length !== 1 ? "s" : ""} aberta${orders.length !== 1 ? "s" : ""}`}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Número da Comanda</Label>
-                <Select
-                  value={selectedOrder?.id}
-                  onValueChange={(value) => {
-                    const order = orders.find((o) => o.id === value);
-                    setSelectedOrder(order || null);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma comanda" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {orders.map((order) => (
-                      <SelectItem key={order.id} value={order.id}>
-                        Comanda #{order.order_number} - {order.customer_name} - R$ {Number(order.total_amount).toFixed(2)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {loadingOrders ? (
+                <div className="flex items-center justify-center py-8">
+                  <p className="text-muted-foreground">Carregando comandas...</p>
+                </div>
+              ) : orders.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <Receipt className="h-12 w-12 mb-4 text-muted-foreground" />
+                  <p className="text-muted-foreground font-medium">Nenhuma comanda aberta</p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    As comandas abertas aparecerão aqui quando forem criadas
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label>Número da Comanda</Label>
+                  <Select
+                    value={selectedOrder?.id}
+                    onValueChange={(value) => {
+                      const order = orders.find((o) => o.id === value);
+                      setSelectedOrder(order || null);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione uma comanda" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {orders.map((order) => (
+                        <SelectItem key={order.id} value={order.id}>
+                          Comanda #{order.order_number} - {order.customer_name || "Sem nome"} - R$ {Number(order.total_amount).toFixed(2)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {selectedOrder && (
                 <div className="space-y-3 p-4 bg-accent/30 rounded-lg">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Cliente</span>
                     <span className="font-semibold">
-                      {selectedOrder.customer_name}
+                      {selectedOrder.customer_name || "Sem nome"}
                     </span>
                   </div>
                   <div className="flex justify-between">

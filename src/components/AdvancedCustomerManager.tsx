@@ -8,6 +8,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import CustomerFormWithRewards from "./CustomerFormWithRewards";
+import CustomerRewardsDisplay from "./CustomerRewardsDisplay";
 import { 
   UserPlus, 
   Edit, 
@@ -28,7 +31,8 @@ import {
   XCircle,
   AlertCircle,
   Download,
-  Filter
+  Filter,
+  MessageCircle
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -36,19 +40,26 @@ import { ptBR } from "date-fns/locale";
 interface Customer {
   id: string;
   name: string;
-  email: string;
-  phone: string;
-  address: string;
-  city: string;
-  state: string;
-  zip_code: string;
-  birth_date: string;
+  email?: string;
+  phone?: string;
+  whatsapp_number?: string;
+  whatsapp_verified?: boolean;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip_code?: string;
+  birth_date?: string;
   tier: 'bronze' | 'silver' | 'gold' | 'platinum';
   total_orders: number;
   total_spent: number;
-  last_order_date: string;
-  notes: string;
+  last_order_date?: string;
+  notes?: string;
   is_active: boolean;
+  referral_code?: string;
+  referred_by?: string;
+  points?: number;
+  total_points_earned?: number;
+  total_points_redeemed?: number;
   created_at: string;
   updated_at: string;
 }
@@ -96,31 +107,34 @@ const AdvancedCustomerManager = () => {
     "RS", "RO", "RR", "SC", "SP", "SE", "TO"
   ];
 
-  // Load data from localStorage
+  // Load data from Supabase
   useEffect(() => {
     loadCustomers();
   }, []);
 
-  const loadCustomers = () => {
+  const loadCustomers = async () => {
+    setLoading(true);
     try {
-      const savedCustomers = localStorage.getItem('customers_data');
-      if (savedCustomers) {
-        const data = JSON.parse(savedCustomers);
-        setCustomers(data);
-        calculateStats(data);
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (data) {
+        setCustomers(data as Customer[]);
+        calculateStats(data as Customer[]);
       }
     } catch (error) {
       console.error("Erro ao carregar clientes:", error);
-    }
-  };
-
-  const saveCustomers = (newCustomers: Customer[]) => {
-    try {
-      localStorage.setItem('customers_data', JSON.stringify(newCustomers));
-      setCustomers(newCustomers);
-      calculateStats(newCustomers);
-    } catch (error) {
-      console.error("Erro ao salvar clientes:", error);
+      toast({
+        title: "Erro ao carregar clientes",
+        description: "Não foi possível carregar a lista de clientes",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -163,67 +177,7 @@ const AdvancedCustomerManager = () => {
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!formData.name?.trim()) {
-      toast({
-        title: "Nome obrigatório",
-        description: "O nome do cliente é obrigatório",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      const customerData: Customer = {
-        id: editingCustomer?.id || crypto.randomUUID(),
-        name: formData.name!,
-        email: formData.email || "",
-        phone: formData.phone || "",
-        address: formData.address || "",
-        city: formData.city || "",
-        state: formData.state || "",
-        zip_code: formData.zip_code || "",
-        birth_date: formData.birth_date || "",
-        tier: formData.tier || "bronze",
-        total_orders: editingCustomer?.total_orders || 0,
-        total_spent: editingCustomer?.total_spent || 0,
-        last_order_date: editingCustomer?.last_order_date || "",
-        notes: formData.notes || "",
-        is_active: formData.is_active ?? true,
-        created_at: editingCustomer?.created_at || new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-
-      let newCustomers;
-      if (editingCustomer) {
-        newCustomers = customers.map(c => c.id === editingCustomer.id ? customerData : c);
-        toast({
-          title: "Cliente atualizado!",
-          description: "Dados do cliente atualizados com sucesso",
-        });
-      } else {
-        newCustomers = [...customers, customerData];
-        toast({
-          title: "Cliente cadastrado!",
-          description: "Novo cliente adicionado com sucesso",
-        });
-      }
-
-      saveCustomers(newCustomers);
-      setShowForm(false);
-      setEditingCustomer(null);
-      resetForm();
-    } catch (error) {
-      console.error("Erro ao salvar cliente:", error);
-      toast({
-        title: "Erro ao salvar cliente",
-        description: "Não foi possível salvar os dados",
-        variant: "destructive",
-      });
-    }
-  };
+  // Removido - agora usa CustomerFormWithRewards
 
   const handleEdit = (customer: Customer) => {
     setEditingCustomer(customer);
@@ -235,13 +189,20 @@ const AdvancedCustomerManager = () => {
     if (!confirm("Tem certeza que deseja excluir este cliente?")) return;
 
     try {
-      const newCustomers = customers.filter(c => c.id !== customerId);
-      saveCustomers(newCustomers);
+      const { error } = await supabase
+        .from('customers')
+        .delete()
+        .eq('id', customerId);
+
+      if (error) throw error;
 
       toast({
         title: "Cliente excluído!",
         description: "Cliente removido com sucesso",
       });
+
+      // Recarregar lista
+      loadCustomers();
     } catch (error) {
       console.error("Erro ao excluir cliente:", error);
       toast({
@@ -286,6 +247,28 @@ const AdvancedCustomerManager = () => {
       default:
         return { label: "Cliente", color: "bg-gray-100 text-gray-800", icon: Star };
     }
+  };
+
+  const getTierBadge = (tier: string) => {
+    const info = getTierInfo(tier);
+    const Icon = info.icon;
+    return (
+      <Badge className={info.color}>
+        <Icon className="h-3 w-3 mr-1" />
+        {info.label}
+      </Badge>
+    );
+  };
+
+  const getStatusBadge = (isActive: boolean) => {
+    const info = getStatusInfo(isActive);
+    const Icon = info.icon;
+    return (
+      <Badge variant={info.color as any}>
+        <Icon className="h-3 w-3 mr-1" />
+        {info.label}
+      </Badge>
+    );
   };
 
   const getStatusInfo = (isActive: boolean) => {
@@ -369,212 +352,204 @@ const AdvancedCustomerManager = () => {
                 Novo Cliente
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
                   {editingCustomer ? "Editar Cliente" : "Novo Cliente"}
                 </DialogTitle>
               </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Nome Completo *</Label>
-                    <Input
-                      id="name"
-                      value={formData.name || ""}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="Nome do cliente"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={formData.email || ""}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      placeholder="cliente@email.com"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Telefone</Label>
-                    <Input
-                      id="phone"
-                      value={formData.phone || ""}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      placeholder="(11) 99999-9999"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="tier">Tier do Cliente</Label>
-                    <Select
-                      value={formData.tier || "bronze"}
-                      onValueChange={(value: 'bronze' | 'silver' | 'gold' | 'platinum') => 
-                        setFormData({ ...formData, tier: value })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="bronze">Bronze</SelectItem>
-                        <SelectItem value="silver">Prata</SelectItem>
-                        <SelectItem value="gold">Ouro</SelectItem>
-                        <SelectItem value="platinum">Platina</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="city">Cidade</Label>
-                    <Input
-                      id="city"
-                      value={formData.city || ""}
-                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                      placeholder="Cidade"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="state">Estado</Label>
-                    <Select
-                      value={formData.state || ""}
-                      onValueChange={(value) => setFormData({ ...formData, state: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o estado" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {states.map(state => (
-                          <SelectItem key={state} value={state}>{state}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="zip_code">CEP</Label>
-                    <Input
-                      id="zip_code"
-                      value={formData.zip_code || ""}
-                      onChange={(e) => setFormData({ ...formData, zip_code: e.target.value })}
-                      placeholder="00000-000"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="birth_date">Data de Nascimento</Label>
-                    <Input
-                      id="birth_date"
-                      type="date"
-                      value={formData.birth_date || ""}
-                      onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="status">Status</Label>
-                    <Select
-                      value={formData.is_active ? "active" : "inactive"}
-                      onValueChange={(value) => setFormData({ ...formData, is_active: value === "active" })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="active">Ativo</SelectItem>
-                        <SelectItem value="inactive">Inativo</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="address">Endereço</Label>
-                  <Input
-                    id="address"
-                    value={formData.address || ""}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    placeholder="Endereço completo"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Observações</Label>
-                  <Textarea
-                    id="notes"
-                    value={formData.notes || ""}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    placeholder="Observações sobre o cliente"
-                    rows={3}
-                  />
-                </div>
-                <div className="flex justify-end space-x-2">
-                  <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
-                    Cancelar
-                  </Button>
-                  <Button type="submit">
-                    {editingCustomer ? "Atualizar" : "Cadastrar"} Cliente
-                  </Button>
-                </div>
-              </form>
+              <CustomerFormWithRewards
+                customerId={editingCustomer?.id}
+                onSuccess={() => {
+                  setShowForm(false);
+                  setEditingCustomer(null);
+                  loadCustomers();
+                }}
+                onCancel={() => {
+                  setShowForm(false);
+                  setEditingCustomer(null);
+                }}
+              />
             </DialogContent>
           </Dialog>
         </div>
       </div>
 
+      {/* Customer Details Dialog */}
+      <Dialog open={showDetails} onOpenChange={setShowDetails}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalhes do Cliente</DialogTitle>
+          </DialogHeader>
+          {selectedCustomer && (
+            <div className="space-y-6">
+              {/* Informações Básicas */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Informações Básicas</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Nome</p>
+                      <p className="font-semibold">{selectedCustomer.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Email</p>
+                      <p className="font-semibold">{selectedCustomer.email || "Não informado"}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Telefone</p>
+                      <p className="font-semibold">{selectedCustomer.phone || "Não informado"}</p>
+                    </div>
+                    {selectedCustomer.whatsapp_number && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">WhatsApp</p>
+                        <p className="font-semibold flex items-center gap-2">
+                          {selectedCustomer.whatsapp_number}
+                          {selectedCustomer.whatsapp_verified && (
+                            <Badge variant="default" className="text-xs">Verificado</Badge>
+                          )}
+                        </p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-sm text-muted-foreground">Tier</p>
+                      {getTierBadge(selectedCustomer.tier)}
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Status</p>
+                      {getStatusBadge(selectedCustomer.is_active)}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Sistema de Bonificação e Indicação */}
+              <CustomerRewardsDisplay
+                customerId={selectedCustomer.id}
+                customerName={selectedCustomer.name}
+                customerWhatsapp={selectedCustomer.whatsapp_number}
+                referralCode={selectedCustomer.referral_code}
+              />
+
+              {/* Estatísticas */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Estatísticas</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total de Pedidos</p>
+                      <p className="text-2xl font-bold">{selectedCustomer.total_orders}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Gasto</p>
+                      <p className="text-2xl font-bold text-green-600">
+                        R$ {selectedCustomer.total_spent.toFixed(2)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Ticket Médio</p>
+                      <p className="text-2xl font-bold">
+                        R$ {selectedCustomer.total_orders > 0 
+                          ? (selectedCustomer.total_spent / selectedCustomer.total_orders).toFixed(2)
+                          : '0.00'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Ações */}
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    handleEdit(selectedCustomer);
+                    setShowDetails(false);
+                  }}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Editar
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    setShowDetails(false);
+                    handleDelete(selectedCustomer.id);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Excluir
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total de Clientes</p>
-                <p className="text-2xl font-bold">{stats.total}</p>
+      {stats && (
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Total de Clientes</p>
+                  <p className="text-2xl font-bold">{stats.total}</p>
+                </div>
+                <Users className="h-8 w-8 text-primary" />
               </div>
-              <Users className="h-8 w-8 text-primary" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Clientes Ativos</p>
-                <p className="text-2xl font-bold text-green-600">{stats.active}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Clientes Ativos</p>
+                  <p className="text-2xl font-bold text-green-600">{stats.active}</p>
+                </div>
+                <CheckCircle className="h-8 w-8 text-green-500" />
               </div>
-              <CheckCircle className="h-8 w-8 text-green-500" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Receita Total</p>
-                <p className="text-2xl font-bold">R$ {stats.totalRevenue.toFixed(2)}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Receita Total</p>
+                  <p className="text-2xl font-bold">R$ {stats.totalRevenue.toFixed(2)}</p>
+                </div>
+                <DollarSign className="h-8 w-8 text-yellow-500" />
               </div>
-              <DollarSign className="h-8 w-8 text-yellow-500" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Ticket Médio</p>
-                <p className="text-2xl font-bold">R$ {stats.averageTicket.toFixed(2)}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Ticket Médio</p>
+                  <p className="text-2xl font-bold">R$ {stats.averageTicket.toFixed(2)}</p>
+                </div>
+                <TrendingUp className="h-8 w-8 text-blue-500" />
               </div>
-              <TrendingUp className="h-8 w-8 text-blue-500" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Clientes Inativos</p>
-                <p className="text-2xl font-bold text-red-600">{stats.inactive}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Clientes Inativos</p>
+                  <p className="text-2xl font-bold text-red-600">{stats.inactive}</p>
+                </div>
+                <XCircle className="h-8 w-8 text-red-500" />
               </div>
-              <XCircle className="h-8 w-8 text-red-500" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Filters */}
       <Card>
@@ -620,179 +595,120 @@ const AdvancedCustomerManager = () => {
       </Card>
 
       {/* Customers Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredCustomers.map((customer) => {
-          const tierInfo = getTierInfo(customer.tier);
-          const statusInfo = getStatusInfo(customer.is_active);
-          const StatusIcon = statusInfo.icon;
-          
-          return (
-            <Card key={customer.id} className="shadow-soft hover:shadow-lg transition-smooth">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <CardTitle className="text-lg">{customer.name}</CardTitle>
-                    <p className="text-sm text-muted-foreground">{customer.email}</p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Badge variant={statusInfo.color as "default" | "secondary"} className="text-xs">
-                      <StatusIcon className="h-3 w-3 mr-1" />
-                      {statusInfo.label}
-                    </Badge>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Badge className={tierInfo.color}>
-                    <Star className="h-3 w-3 mr-1" />
-                    {tierInfo.label}
-                  </Badge>
-                  {customer.city && (
-                    <Badge variant="outline" className="text-xs">
-                      {customer.city}
-                    </Badge>
-                  )}
-                </div>
-                
-                <div className="space-y-2 text-sm">
-                  {customer.phone && (
-                    <div className="flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-muted-foreground" />
-                      <span>{customer.phone}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <ShoppingBag className="h-4 w-4 text-muted-foreground" />
-                    <span>{customer.total_orders} pedidos</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    <span>R$ {customer.total_spent.toFixed(2)}</span>
-                  </div>
-                  {customer.last_order_date && (
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span>{format(new Date(customer.last_order_date), "dd/MM/yyyy", { locale: ptBR })}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex justify-end space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleViewDetails(customer)}
-                  >
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleEdit(customer)}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDelete(customer.id)}
-                    className="text-red-600 hover:text-red-700"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* Customer Details Modal */}
-      <Dialog open={showDetails} onOpenChange={setShowDetails}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Detalhes do Cliente</DialogTitle>
-          </DialogHeader>
-          {selectedCustomer && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium">Nome</Label>
-                  <p className="text-sm">{selectedCustomer.name}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Email</Label>
-                  <p className="text-sm">{selectedCustomer.email}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Telefone</Label>
-                  <p className="text-sm">{selectedCustomer.phone || "Não informado"}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Tier</Label>
-                  <p className="text-sm">{getTierInfo(selectedCustomer.tier).label}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Cidade</Label>
-                  <p className="text-sm">{selectedCustomer.city || "Não informado"}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Estado</Label>
-                  <p className="text-sm">{selectedCustomer.state || "Não informado"}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Total de Pedidos</Label>
-                  <p className="text-sm">{selectedCustomer.total_orders}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Total Gasto</Label>
-                  <p className="text-sm">R$ {selectedCustomer.total_spent.toFixed(2)}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Status</Label>
-                  <p className="text-sm">{selectedCustomer.is_active ? "Ativo" : "Inativo"}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Data de Cadastro</Label>
-                  <p className="text-sm">{format(new Date(selectedCustomer.created_at), "dd/MM/yyyy", { locale: ptBR })}</p>
-                </div>
-              </div>
-              {selectedCustomer.address && (
-                <div>
-                  <Label className="text-sm font-medium">Endereço</Label>
-                  <p className="text-sm">{selectedCustomer.address}</p>
-                </div>
-              )}
-              {selectedCustomer.notes && (
-                <div>
-                  <Label className="text-sm font-medium">Observações</Label>
-                  <p className="text-sm">{selectedCustomer.notes}</p>
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {filteredCustomers.length === 0 && (
+      {filteredCustomers.length === 0 ? (
         <Card>
-          <CardContent className="p-6 text-center">
+          <CardContent className="p-8 text-center">
             <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-lg text-muted-foreground">
-              {searchTerm || filterTier !== "all" || filterStatus !== "all" 
-                ? "Nenhum cliente encontrado" 
-                : "Nenhum cliente cadastrado"
-              }
-            </p>
+            <p className="text-lg font-semibold mb-2">Nenhum cliente encontrado</p>
             <p className="text-sm text-muted-foreground">
               {searchTerm || filterTier !== "all" || filterStatus !== "all"
                 ? "Tente ajustar os filtros de busca"
-                : "Clique em 'Novo Cliente' para começar"
-              }
+                : "Clique em 'Novo Cliente' para começar"}
             </p>
           </CardContent>
         </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredCustomers.map((customer) => {
+            const tierInfo = getTierInfo(customer.tier);
+            const statusInfo = getStatusInfo(customer.is_active);
+            const StatusIcon = statusInfo.icon;
+            
+            return (
+              <Card key={customer.id} className="shadow-soft hover:shadow-lg transition-smooth">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1">
+                      <CardTitle className="text-lg">{customer.name}</CardTitle>
+                      <p className="text-sm text-muted-foreground">{customer.email || "Sem email"}</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Badge variant={statusInfo.color as "default" | "secondary"} className="text-xs">
+                        <StatusIcon className="h-3 w-3 mr-1" />
+                        {statusInfo.label}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Badge className={tierInfo.color}>
+                      <Star className="h-3 w-3 mr-1" />
+                      {tierInfo.label}
+                    </Badge>
+                    {customer.city && (
+                      <Badge variant="outline" className="text-xs">
+                        {customer.city}
+                      </Badge>
+                    )}
+                    {customer.points && customer.points > 0 && (
+                      <Badge variant="outline" className="text-xs bg-yellow-50">
+                        {customer.points} pts
+                      </Badge>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-2 text-sm">
+                    {customer.phone && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="h-4 w-4 text-muted-foreground" />
+                        <span>{customer.phone}</span>
+                      </div>
+                    )}
+                    {customer.whatsapp_number && (
+                      <div className="flex items-center gap-2">
+                        <MessageCircle className="h-4 w-4 text-green-600" />
+                        <span className="text-green-600">{customer.whatsapp_number}</span>
+                        {customer.whatsapp_verified && (
+                          <Badge variant="default" className="text-xs">Verificado</Badge>
+                        )}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <ShoppingBag className="h-4 w-4 text-muted-foreground" />
+                      <span>{customer.total_orders} pedidos</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-4 w-4 text-muted-foreground" />
+                      <span>R$ {customer.total_spent.toFixed(2)}</span>
+                    </div>
+                    {customer.last_order_date && (
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <span>{format(new Date(customer.last_order_date), "dd/MM/yyyy", { locale: ptBR })}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleViewDetails(customer)}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEdit(customer)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDelete(customer.id)}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       )}
     </div>
   );

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -113,7 +114,7 @@ const AdvancedCashManager = () => {
       }
 
       // Generate daily report
-      generateDailyReport();
+      generateDailyReport().catch(err => console.error('Erro ao gerar relatório:', err));
     } catch (error) {
       console.error("Erro ao carregar dados do caixa:", error);
     }
@@ -128,11 +129,23 @@ const AdvancedCashManager = () => {
     }
   };
 
-  const generateDailyReport = () => {
+  const generateDailyReport = async () => {
     try {
-      // Load orders from localStorage
-      const savedOrders = localStorage.getItem('orders_data');
-      if (!savedOrders) {
+      console.log('📊 AdvancedCashManager: Gerando relatório diário...');
+      
+      // Buscar comandas fechadas de hoje do Supabase
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const { data: orders, error: ordersError } = await supabase
+        .from("orders")
+        .select("id, total_amount, total_weight, closed_at, payments(payment_method, amount)")
+        .eq("status", "closed")
+        .gte("closed_at", today.toISOString());
+
+      if (ordersError) {
+        console.error('❌ Erro ao buscar comandas:', ordersError);
+        // Fallback para valores zero
         setDailyReport({
           totalSales: 0,
           totalOrders: 0,
@@ -149,31 +162,34 @@ const AdvancedCashManager = () => {
         return;
       }
 
-      interface Order {
-        created_at?: string;
-        total_amount?: number;
-        total_weight?: number;
-      }
-      
-      const orders: Order[] = JSON.parse(savedOrders);
-      const today = new Date().toISOString().split('T')[0];
-      
-      // Filter today's orders
-      const todayOrders = orders.filter((order) => 
-        order.created_at && order.created_at.startsWith(today)
-      );
-
-      const totalSales = todayOrders.reduce((sum: number, order) => sum + (order.total_amount || 0), 0);
-      const totalOrders = todayOrders.length;
-      const totalWeight = todayOrders.reduce((sum: number, order) => sum + (order.total_weight || 0), 0);
+      const totalSales = orders?.reduce((sum, order) => sum + Number(order.total_amount || 0), 0) || 0;
+      const totalOrders = orders?.length || 0;
+      const totalWeight = orders?.reduce((sum, order) => sum + Number(order.total_weight || 0), 0) || 0;
       const averageTicket = totalOrders > 0 ? totalSales / totalOrders : 0;
 
-      // Payment methods (simplified - assuming all cash for now)
-      const paymentMethods = {
-        'Dinheiro': totalSales,
+      // Calcular métodos de pagamento
+      const paymentMethods: Record<string, number> = {
+        'Dinheiro': 0,
         'Cartão': 0,
         'PIX': 0,
       };
+
+      orders?.forEach((order: any) => {
+        if (order.payments && Array.isArray(order.payments)) {
+          order.payments.forEach((payment: any) => {
+            const method = payment.payment_method;
+            const amount = Number(payment.amount || 0);
+            
+            if (method === 'cash') {
+              paymentMethods['Dinheiro'] += amount;
+            } else if (method === 'credit' || method === 'debit') {
+              paymentMethods['Cartão'] += amount;
+            } else if (method === 'pix') {
+              paymentMethods['PIX'] += amount;
+            }
+          });
+        }
+      });
 
       // Cash flow
       const openingBalance = cashStatus.openingBalance;

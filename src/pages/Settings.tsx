@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Settings as SettingsIcon, Save } from "lucide-react";
+import WhatsAppQRCode from "@/components/WhatsAppQRCode";
+import { Settings as SettingsIcon, Save, MessageCircle } from "lucide-react";
 import { clearSettingsCache } from "@/utils/settingsCache";
 
 const Settings = () => {
@@ -240,17 +242,30 @@ const Settings = () => {
           </p>
         </div>
 
-        <Card className="shadow-strong">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <SettingsIcon className="h-6 w-6 text-primary" />
-              Parâmetros do Sistema
-            </CardTitle>
-            <CardDescription>
-              Defina os valores padrão para operação do restaurante
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
+        <Tabs defaultValue="system" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="system" className="flex items-center gap-2">
+              <SettingsIcon className="h-4 w-4" />
+              Sistema
+            </TabsTrigger>
+            <TabsTrigger value="whatsapp" className="flex items-center gap-2">
+              <MessageCircle className="h-4 w-4" />
+              WhatsApp
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="system" className="space-y-6">
+            <Card className="shadow-strong">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <SettingsIcon className="h-6 w-6 text-primary" />
+                  Parâmetros do Sistema
+                </CardTitle>
+                <CardDescription>
+                  Defina os valores padrão para operação do restaurante
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="price-per-kg">Preço por Kg (R$)</Label>
               <Input
@@ -325,6 +340,19 @@ const Settings = () => {
             </Button>
           </CardContent>
         </Card>
+          </TabsContent>
+
+          <TabsContent value="whatsapp" className="space-y-6">
+            <WhatsAppQRCode
+              onConnected={() => {
+                toast({
+                  title: "WhatsApp conectado!",
+                  description: "Agora você pode enviar mensagens via WhatsApp",
+                });
+              }}
+            />
+          </TabsContent>
+        </Tabs>
       </div>
     </DashboardLayout>
   );

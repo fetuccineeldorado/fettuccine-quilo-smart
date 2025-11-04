@@ -33,6 +33,21 @@ const Orders = () => {
     setLoading(true);
     
     try {
+      // Verificar sessão antes de buscar comandas
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        console.error('❌ Erro de autenticação:', sessionError);
+        toast({
+          title: "Erro de autenticação",
+          description: "Por favor, faça login novamente.",
+          variant: "destructive",
+        });
+        setOrders([]);
+        setLoading(false);
+        return;
+      }
+      
       const { data, error } = await supabase
         .from("orders")
         .select("*")
@@ -40,9 +55,24 @@ const Orders = () => {
 
       if (error) {
         console.error('❌ Erro ao carregar comandas:', error);
+        console.error('❌ Detalhes do erro:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+        
+        // Tratamento específico de erros
+        let errorMessage = error.message;
+        if (error.code === 'PGRST301' || error.message.includes("permission") || error.message.includes("unauthorized")) {
+          errorMessage = "Você não tem permissão para visualizar comandas. Verifique sua autenticação.";
+        } else if (error.message.includes("network") || error.message.includes("fetch")) {
+          errorMessage = "Erro de conexão. Verifique sua internet e tente novamente.";
+        }
+        
         toast({
           title: "Erro ao carregar comandas",
-          description: error.message,
+          description: errorMessage,
           variant: "destructive",
         });
         setOrders([]);
@@ -53,9 +83,22 @@ const Orders = () => {
       }
     } catch (err) {
       console.error('💥 Erro geral ao carregar comandas:', err);
+      
+      // Tratamento específico de erros
+      let errorMessage = "Erro desconhecido";
+      if (err instanceof Error) {
+        if (err.message.includes("network") || err.message.includes("fetch")) {
+          errorMessage = "Erro de conexão. Verifique sua internet e tente novamente.";
+        } else if (err.message.includes("permission") || err.message.includes("unauthorized")) {
+          errorMessage = "Você não tem permissão para visualizar comandas.";
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
       toast({
         title: "Erro ao carregar comandas",
-        description: "Erro desconhecido",
+        description: errorMessage,
         variant: "destructive",
       });
       setOrders([]);
