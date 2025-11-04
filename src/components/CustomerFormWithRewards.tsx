@@ -85,13 +85,26 @@ const CustomerFormWithRewards = ({ customerId, onSuccess, onCancel }: CustomerFo
 
   const loadCustomerData = async () => {
     try {
-      const { data, error } = await supabase
+      // Tentar carregar todos os campos primeiro
+      let { data, error } = await supabase
         .from('customers')
         .select('*')
         .eq('id', customerId)
         .single();
 
-      if (error) throw error;
+      // Se erro de coluna não encontrada, carregar apenas campos básicos originais
+      if (error && error.message?.includes("Could not find the")) {
+        const { data: basicData, error: basicError } = await supabase
+          .from('customers')
+          .select('id, name, email, phone, tier, total_orders, total_spent, created_at, updated_at')
+          .eq('id', customerId)
+          .single();
+        
+        if (basicError) throw basicError;
+        data = basicData;
+      } else if (error) {
+        throw error;
+      }
 
       if (data) {
         setFormData({
@@ -99,20 +112,26 @@ const CustomerFormWithRewards = ({ customerId, onSuccess, onCancel }: CustomerFo
           email: data.email || "",
           phone: data.phone || "",
           whatsapp_number: data.whatsapp_number || "",
-          address: data.address || "",
-          city: data.city || "",
-          state: data.state || "",
-          zip_code: data.zip_code || "",
-          birth_date: data.birth_date || "",
-          notes: data.notes || "",
+          address: (data as any).address || "",
+          city: (data as any).city || "",
+          state: (data as any).state || "",
+          zip_code: (data as any).zip_code || "",
+          birth_date: (data as any).birth_date ? ((data as any).birth_date.split('T')[0] || "") : "",
+          notes: (data as any).notes || "",
           is_active: data.is_active ?? true,
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao carregar cliente:', error);
+      
+      let errorMessage = "Não foi possível carregar os dados do cliente";
+      if (error.message?.includes("Could not find the")) {
+        errorMessage = "A migração SQL não foi aplicada. Alguns campos podem não estar disponíveis.";
+      }
+      
       toast({
         title: "Erro ao carregar cliente",
-        description: "Não foi possível carregar os dados do cliente",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -128,17 +147,6 @@ const CustomerFormWithRewards = ({ customerId, onSuccess, onCancel }: CustomerFo
         toast({
           title: "Nome obrigatório",
           description: "O nome do cliente é obrigatório",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
-
-      // Validar WhatsApp se fornecido
-      if (formData.whatsapp_number && !whatsappService.validatePhoneNumber(formData.whatsapp_number)) {
-        toast({
-          title: "Número de WhatsApp inválido",
-          description: "Por favor, informe um número válido",
           variant: "destructive",
         });
         setLoading(false);
@@ -165,49 +173,133 @@ const CustomerFormWithRewards = ({ customerId, onSuccess, onCancel }: CustomerFo
       }
 
       // Preparar dados para inserção/atualização
-      const customerData: any = {
-        name: formData.name.trim(),
-        email: formData.email?.trim() || null,
-        phone: formData.phone?.trim() || null,
-        whatsapp_number: formData.whatsapp_number?.trim() || null,
-        whatsapp_verified: !!formData.whatsapp_number,
-        address: formData.address?.trim() || null,
-        city: formData.city?.trim() || null,
-        state: formData.state || null,
-        zip_code: formData.zip_code?.trim() || null,
-        birth_date: formData.birth_date || null,
-        notes: formData.notes?.trim() || null,
-        is_active: formData.is_active ?? true,
+      // Função auxiliar para limpar strings vazias
+      const cleanValue = (value: string | undefined | null): string | null => {
+        if (!value || typeof value !== 'string') return null;
+        const trimmed = value.trim();
+        return trimmed === '' ? null : trimmed;
       };
+
+      // Limpar e formatar WhatsApp
+      const cleanWhatsApp = formData.whatsapp_number?.trim() 
+        ? formData.whatsapp_number.replace(/[^\d+]/g, '').trim() 
+        : null;
+
+      // Campos básicos (sempre existem na tabela original)
+      const basicCustomerData: any = {
+        name: formData.name.trim(),
+        email: cleanValue(formData.email),
+        phone: cleanValue(formData.phone),
+      };
+
+      // Campos da migração (só existem se a migração foi aplicada)
+      const migrationFields: any = {};
+      if (cleanWhatsApp) migrationFields.whatsapp_number = cleanWhatsApp;
+      migrationFields.whatsapp_verified = !!cleanWhatsApp;
+      migrationFields.is_active = formData.is_active ?? true;
+      if (formData.address?.trim()) migrationFields.address = formData.address.trim();
+      if (formData.city?.trim()) migrationFields.city = formData.city.trim();
+      if (formData.state?.trim()) migrationFields.state = formData.state;
+      if (formData.zip_code?.trim()) migrationFields.zip_code = formData.zip_code.trim();
+      if (formData.birth_date) migrationFields.birth_date = formData.birth_date;
+      if (formData.notes?.trim()) migrationFields.notes = formData.notes.trim();
+
+      // Tentar com todos os campos primeiro
+      const fullCustomerData = { ...basicCustomerData, ...migrationFields };
 
       let savedCustomerId: string;
 
       if (customerId) {
         // Atualizar cliente existente
-        const { data, error } = await supabase
+        // Tentar primeiro com todos os campos
+        let { data, error } = await supabase
           .from('customers')
-          .update(customerData)
+          .update(fullCustomerData)
           .eq('id', customerId)
           .select()
           .single();
 
-        if (error) throw error;
-        savedCustomerId = customerId;
+        // Se erro de coluna não encontrada ou erro 400, tentar sem os campos da migração
+        if (error && (error.message?.includes("Could not find the") || error.code === '400' || error.status === 400)) {
+          console.log('Tentando salvar apenas com campos básicos devido a erro:', error.message);
+          // Apenas campos que existem na tabela original (sem migração)
+          const basicData = {
+            name: basicCustomerData.name,
+            email: basicCustomerData.email,
+            phone: basicCustomerData.phone,
+          };
+          
+          const retry = await supabase
+            .from('customers')
+            .update(basicData)
+            .eq('id', customerId)
+            .select()
+            .single();
+          
+          if (retry.error) {
+            console.error('Erro no retry com campos básicos:', retry.error);
+            throw retry.error;
+          }
+          data = retry.data;
+          
+          toast({
+            title: "Cliente atualizado!",
+            description: "Dados básicos atualizados. Aplique a migração SQL para usar todos os campos.",
+            variant: "default",
+          });
+          savedCustomerId = customerId;
+        } else if (error) {
+          throw error;
+        } else {
+          savedCustomerId = customerId;
 
-        toast({
-          title: "Cliente atualizado!",
-          description: "Dados do cliente atualizados com sucesso",
-        });
+          toast({
+            title: "Cliente atualizado!",
+            description: "Dados do cliente atualizados com sucesso",
+          });
+        }
       } else {
         // Criar novo cliente
-        const { data, error } = await supabase
+        // Tentar primeiro com todos os campos
+        let { data, error } = await supabase
           .from('customers')
-          .insert([customerData])
+          .insert([fullCustomerData])
           .select()
           .single();
 
-        if (error) throw error;
-        savedCustomerId = data.id;
+        // Se erro de coluna não encontrada ou erro 400, tentar sem os campos da migração
+        if (error && (error.message?.includes("Could not find the") || error.code === '400' || error.status === 400)) {
+          console.log('Tentando salvar apenas com campos básicos devido a erro:', error.message);
+          // Apenas campos que existem na tabela original (sem migração)
+          const basicData = {
+            name: basicCustomerData.name,
+            email: basicCustomerData.email,
+            phone: basicCustomerData.phone,
+          };
+          
+          const retry = await supabase
+            .from('customers')
+            .insert([basicData])
+            .select()
+            .single();
+          
+          if (retry.error) {
+            console.error('Erro no retry com campos básicos:', retry.error);
+            throw retry.error;
+          }
+          data = retry.data;
+          savedCustomerId = data.id;
+          
+          toast({
+            title: "Cliente cadastrado!",
+            description: "Cliente cadastrado com dados básicos. Aplique a migração SQL para usar todos os campos.",
+            variant: "default",
+          });
+        } else if (error) {
+          throw error;
+        } else {
+          savedCustomerId = data.id;
+        }
 
         // Gerar código de indicação
         const referralCode = await referralService.generateReferralCode(savedCustomerId);
@@ -287,10 +379,44 @@ const CustomerFormWithRewards = ({ customerId, onSuccess, onCancel }: CustomerFo
       }
     } catch (error: any) {
       console.error('Erro ao salvar cliente:', error);
+      console.error('Detalhes do erro:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      });
+      
+      // Tratar erros específicos
+      let errorMessage = error.message || "Não foi possível salvar os dados";
+      
+      if (error.code === '400' || error.message?.includes('400')) {
+        errorMessage = "Erro de validação. Verifique se todos os campos obrigatórios estão preenchidos corretamente.";
+      } else if (error.message?.includes("Could not find the 'address' column") ||
+          error.message?.includes("Could not find the 'city' column") ||
+          error.message?.includes("Could not find the 'state' column") ||
+          error.message?.includes("Could not find the 'zip_code' column") ||
+          error.message?.includes("Could not find the 'birth_date' column") ||
+          error.message?.includes("Could not find the 'notes' column")) {
+        errorMessage = "A migração SQL não foi aplicada. Execute o arquivo 'supabase/migrations/20250101000002_create_customer_rewards_system.sql' no Supabase SQL Editor.";
+      } else if (error.message?.includes("Could not find the table")) {
+        errorMessage = "A tabela não existe. Aplique as migrações SQL no Supabase.";
+      } else if (error.code === 'PGRST205') {
+        errorMessage = "Tabela ou coluna não encontrada. Aplique as migrações SQL primeiro.";
+      } else if (error.code === '23505') {
+        errorMessage = "Já existe um cliente com este e-mail ou código de indicação.";
+      } else if (error.code === '23503') {
+        errorMessage = "Erro de referência: verifique se o código de indicação é válido.";
+      } else if (error.code === 'PGRST116') {
+        errorMessage = "Cliente não encontrado.";
+      } else if (error.code === 'PGRST301') {
+        errorMessage = "Erro de permissão. Verifique as políticas RLS no Supabase.";
+      }
+
       toast({
         title: "Erro ao salvar cliente",
-        description: error.message || "Não foi possível salvar os dados",
+        description: errorMessage,
         variant: "destructive",
+        duration: 10000, // 10 segundos para dar tempo de ler
       });
     } finally {
       setLoading(false);
@@ -357,7 +483,7 @@ const CustomerFormWithRewards = ({ customerId, onSuccess, onCancel }: CustomerFo
             <div className="space-y-2">
               <Label htmlFor="whatsapp">
                 <MessageCircle className="h-4 w-4 inline mr-1" />
-                WhatsApp *
+                WhatsApp
               </Label>
               <Input
                 id="whatsapp"
@@ -365,10 +491,9 @@ const CustomerFormWithRewards = ({ customerId, onSuccess, onCancel }: CustomerFo
                 value={formData.whatsapp_number}
                 onChange={(e) => setFormData(prev => ({ ...prev, whatsapp_number: e.target.value }))}
                 placeholder="(11) 99999-9999"
-                required={!customerId}
               />
               <p className="text-xs text-muted-foreground">
-                Número para receber notificações e promoções
+                Número para receber notificações e promoções (opcional)
               </p>
             </div>
 

@@ -85,13 +85,27 @@ const PromotionCreator = () => {
   const loadCustomers = async () => {
     setLoadingCustomers(true);
     try {
-      // Buscar todos os clientes - usar apenas campos básicos que sempre existem
-      const { data, error } = await supabase
+      // Tentar buscar com whatsapp_number primeiro
+      let { data, error } = await supabase
         .from('customers')
-        .select('id, name, phone, email')
+        .select('id, name, phone, email, whatsapp_number, is_active')
         .order('name');
 
-      if (error) {
+      // Se der erro (migração não aplicada), tentar apenas com campos básicos
+      if (error && error.message?.includes("Could not find the")) {
+        console.log('Tentando carregar apenas campos básicos');
+        const basicQuery = await supabase
+          .from('customers')
+          .select('id, name, phone, email')
+          .order('name');
+        
+        if (basicQuery.error) {
+          throw basicQuery.error;
+        }
+        
+        data = basicQuery.data;
+        error = basicQuery.error;
+      } else if (error) {
         console.error('Erro detalhado ao carregar clientes:', error);
         throw error;
       }
