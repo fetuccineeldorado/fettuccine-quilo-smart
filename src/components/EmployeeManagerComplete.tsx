@@ -124,23 +124,117 @@ const EmployeeManagerComplete = () => {
   const loadEmployees = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      console.log("🔄 Iniciando carregamento de funcionários...");
+      
+      // Verificar sessão primeiro
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error("❌ Erro ao verificar sessão:", sessionError);
+        throw new Error("Erro de autenticação. Por favor, faça login novamente.");
+      }
+
+      console.log("✅ Sessão verificada:", session ? "Autenticado" : "Não autenticado");
+
+      if (!session) {
+        console.warn("⚠️ Nenhuma sessão encontrada. Tentando carregar sem autenticação...");
+        toast({
+          title: "Atenção",
+          description: "Você não está autenticado. Algumas funcionalidades podem não funcionar.",
+          variant: "default",
+        });
+      }
+
+      // Primeiro, verificar se a tabela existe tentando uma query simples
+      console.log("🔍 Verificando se a tabela employees existe...");
+      
+      // Tentar carregar funcionários com timeout
+      const queryPromise = supabase
         .from("employees")
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Timeout: A consulta demorou mais de 10 segundos")), 10000)
+      );
 
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+
+      if (error) {
+        console.error("❌ Erro detalhado ao carregar funcionários:", {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          fullError: JSON.stringify(error, null, 2)
+        });
+
+        // Tratar erros específicos
+        if (error.code === 'PGRST301' || error.message?.includes('permission denied') || error.message?.includes('policy') || error.message?.includes('RLS')) {
+          const errorMsg = "Você não tem permissão para visualizar funcionários. Execute o script 'fix_employees_rls_rapido.sql' no Supabase SQL Editor.";
+          console.error("🔒 Erro de permissão RLS:", errorMsg);
+          throw new Error(errorMsg);
+        } else if (error.code === 'PGRST205' || error.message?.includes('Could not find the table') || error.message?.includes('does not exist')) {
+          const errorMsg = "A tabela 'employees' não foi encontrada. Execute o script 'criar_tabelas_funcionarios_completo.sql' no Supabase SQL Editor.";
+          console.error("📋 Tabela não encontrada:", errorMsg);
+          throw new Error(errorMsg);
+        } else if (error.code === 'PGRST116') {
+          // Tabela existe mas não há dados - não é um erro
+          console.log("✅ Nenhum funcionário cadastrado ainda.");
+          setEmployees([]);
+          return;
+        } else if (error.code === 'PGRST301') {
+          const errorMsg = "Erro de permissão. Verifique as políticas RLS no Supabase.";
+          console.error("🔒 Erro de permissão:", errorMsg);
+          throw new Error(errorMsg);
+        }
+        
+        throw error;
+      }
+
+      console.log("✅ Funcionários carregados com sucesso:", data?.length || 0, "registros");
       setEmployees(data || []);
     } catch (error) {
-      console.error("Erro ao carregar funcionários:", error);
+      console.error("❌ Erro ao carregar funcionários:", error);
+      
+      let errorMessage = "Erro desconhecido ao carregar funcionários";
+      let errorTitle = "Erro ao carregar funcionários";
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        
+        // Mensagens mais específicas
+        if (error.message.includes("timeout") || error.message.includes("Timeout")) {
+          errorTitle = "Timeout";
+          errorMessage = "A consulta demorou muito. Verifique sua conexão ou tente novamente.";
+        } else if (error.message.includes("permission") || error.message.includes("RLS") || error.message.includes("policy")) {
+          errorTitle = "Erro de Permissão";
+          errorMessage = "Você não tem permissão para visualizar funcionários. Execute o script 'fix_employees_rls_rapido.sql' no Supabase SQL Editor.";
+        } else if (error.message.includes("table") || error.message.includes("não foi encontrada")) {
+          errorTitle = "Tabela Não Encontrada";
+          errorMessage = "A tabela 'employees' não existe. Execute o script 'criar_tabelas_funcionarios_completo.sql' no Supabase SQL Editor.";
+        }
+      } else if (typeof error === 'object' && error !== null) {
+        const supabaseError = error as any;
+        if (supabaseError.message) {
+          errorMessage = supabaseError.message;
+        } else if (supabaseError.code) {
+          errorMessage = `Erro ${supabaseError.code}: ${supabaseError.message || 'Erro ao carregar funcionários'}`;
+        }
+      }
+
       toast({
-        title: "Erro ao carregar funcionários",
-        description: error instanceof Error ? error.message : "Erro desconhecido",
+        title: errorTitle,
+        description: errorMessage,
         variant: "destructive",
+        duration: 10000, // Mostrar por 10 segundos
       });
+      
+      // Definir array vazio para evitar erros na renderização
+      setEmployees([]);
     } finally {
       setLoading(false);
+      console.log("🏁 Carregamento de funcionários finalizado");
     }
   };
 
@@ -156,25 +250,42 @@ const EmployeeManagerComplete = () => {
       const fileName = `employee-${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
       const filePath = `employee-photos/${fileName}`;
 
-      // Upload para Supabase Storage
-      const { data, error } = await supabase.storage
-        .from("employee-photos")
+      // Verificar se o bucket existe, se não, tentar criar ou usar fallback
+      let bucketName = "employee-photos";
+      
+      // Tentar fazer upload
+      let uploadResult = await supabase.storage
+        .from(bucketName)
         .upload(filePath, blob, {
           contentType: "image/jpeg",
           upsert: false,
         });
 
-      if (error) throw error;
+      // Se o bucket não existir, tentar criar ou retornar null (foto opcional)
+      if (uploadResult.error) {
+        console.warn("Erro ao fazer upload da foto:", uploadResult.error);
+        
+        // Se o erro for relacionado ao bucket não existir, retornar null
+        if (uploadResult.error.message?.includes("Bucket") || 
+            uploadResult.error.message?.includes("not found") ||
+            uploadResult.error.message?.includes("does not exist")) {
+          console.warn("Bucket 'employee-photos' não encontrado. A foto não será salva no storage.");
+          return null;
+        }
+        
+        throw uploadResult.error;
+      }
 
       // Obter URL pública
       const { data: urlData } = supabase.storage
-        .from("employee-photos")
+        .from(bucketName)
         .getPublicUrl(filePath);
 
       return urlData.publicUrl;
     } catch (error) {
       console.error("Erro ao fazer upload da foto:", error);
-      throw error;
+      // Retornar null em vez de lançar erro - foto é opcional
+      return null;
     } finally {
       setUploadingPhoto(false);
     }
@@ -196,24 +307,43 @@ const EmployeeManagerComplete = () => {
         return;
       }
 
-      // Validar CPF se fornecido
-      if (formData.cpf && !validateCPF(formData.cpf)) {
+      // Validar formato de email
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email.trim())) {
         toast({
-          title: "CPF inválido",
-          description: "Por favor, insira um CPF válido",
+          title: "Email inválido",
+          description: "Por favor, insira um email válido",
           variant: "destructive",
         });
         setLoading(false);
         return;
       }
 
+      // Validar CPF se fornecido (CPF é opcional mas se fornecido deve ser válido)
+      if (formData.cpf && formData.cpf.trim()) {
+        const cleanCPF = formData.cpf.replace(/[^\d]/g, '');
+        if (cleanCPF.length > 0 && !validateCPF(formData.cpf)) {
+          toast({
+            title: "CPF inválido",
+            description: "Por favor, insira um CPF válido ou deixe em branco",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+      }
+
       // Verificar se email já existe (se não estiver editando)
       if (!editingEmployee) {
-        const { data: existingEmail } = await supabase
+        const { data: existingEmail, error: emailError } = await supabase
           .from("employees")
           .select("id")
-          .eq("email", formData.email)
-          .single();
+          .eq("email", formData.email.trim().toLowerCase())
+          .maybeSingle();
+
+        if (emailError && emailError.code !== 'PGRST116') {
+          throw emailError;
+        }
 
         if (existingEmail) {
           toast({
@@ -224,24 +354,59 @@ const EmployeeManagerComplete = () => {
           setLoading(false);
           return;
         }
+      } else {
+        // Ao editar, verificar se o email mudou e se o novo email já existe
+        if (formData.email.trim().toLowerCase() !== editingEmployee.email.toLowerCase()) {
+          const { data: existingEmail, error: emailError } = await supabase
+            .from("employees")
+            .select("id")
+            .eq("email", formData.email.trim().toLowerCase())
+            .maybeSingle();
+
+          if (emailError && emailError.code !== 'PGRST116') {
+            throw emailError;
+          }
+
+          if (existingEmail) {
+            toast({
+              title: "Email já cadastrado",
+              description: "Este email já está em uso por outro funcionário",
+              variant: "destructive",
+            });
+            setLoading(false);
+            return;
+          }
+        }
       }
 
       // Verificar se CPF já existe (se fornecido e não estiver editando)
-      if (formData.cpf && !editingEmployee) {
-        const { data: existingCPF } = await supabase
-          .from("employees")
-          .select("id")
-          .eq("cpf", formData.cpf.replace(/[^\d]/g, ''))
-          .single();
+      if (formData.cpf && formData.cpf.trim()) {
+        const cleanCPF = formData.cpf.replace(/[^\d]/g, '');
+        if (cleanCPF.length > 0) {
+          const checkQuery = supabase
+            .from("employees")
+            .select("id")
+            .eq("cpf", cleanCPF);
+          
+          if (editingEmployee) {
+            checkQuery.neq("id", editingEmployee.id);
+          }
+          
+          const { data: existingCPF, error: cpfError } = await checkQuery.maybeSingle();
 
-        if (existingCPF) {
-          toast({
-            title: "CPF já cadastrado",
-            description: "Este CPF já está em uso por outro funcionário",
-            variant: "destructive",
-          });
-          setLoading(false);
-          return;
+          if (cpfError && cpfError.code !== 'PGRST116') {
+            throw cpfError;
+          }
+
+          if (existingCPF) {
+            toast({
+              title: "CPF já cadastrado",
+              description: "Este CPF já está em uso por outro funcionário",
+              variant: "destructive",
+            });
+            setLoading(false);
+            return;
+          }
         }
       }
 
@@ -261,31 +426,61 @@ const EmployeeManagerComplete = () => {
       }
 
       // Preparar dados para inserção
+      // Limpar valores vazios e converter para null
+      const cleanValue = (value: string | number | null | undefined): string | number | null => {
+        if (value === null || value === undefined) return null;
+        if (typeof value === 'string') {
+          const trimmed = value.trim();
+          return trimmed.length > 0 ? trimmed : null;
+        }
+        if (typeof value === 'number') {
+          return value > 0 ? value : null;
+        }
+        return null;
+      };
+
       const employeeData: any = {
         name: formData.name.trim(),
         email: formData.email.trim().toLowerCase(),
-        cpf: formData.cpf ? formData.cpf.replace(/[^\d]/g, '') : null,
-        phone: formData.phone.trim() || null,
-        address: formData.address.trim() || null,
+        cpf: formData.cpf && formData.cpf.trim() ? formData.cpf.replace(/[^\d]/g, '') : null,
+        phone: cleanValue(formData.phone) as string | null,
+        address: cleanValue(formData.address) as string | null,
         role: formData.role,
-        position: formData.position.trim() || null,
-        department: formData.department || null,
+        position: cleanValue(formData.position) as string | null,
+        department: cleanValue(formData.department) as string | null,
         salary: formData.salary > 0 ? formData.salary : null,
-        hire_date: formData.hire_date || null,
+        hire_date: formData.hire_date && formData.hire_date.trim() ? formData.hire_date : null,
         is_active: formData.is_active,
-        notes: formData.notes.trim() || null,
+        notes: cleanValue(formData.notes) as string | null,
         face_photo_url: photoUrl,
-        created_by: session.user.id,
       };
+
+      // Adicionar created_by apenas para novos funcionários
+      if (!editingEmployee) {
+        employeeData.created_by = session.user.id;
+      }
 
       if (editingEmployee) {
         // Atualizar funcionário existente
-        const { error: updateError } = await supabase
+        const { data: updatedData, error: updateError } = await supabase
           .from("employees")
           .update(employeeData)
-          .eq("id", editingEmployee.id);
+          .eq("id", editingEmployee.id)
+          .select()
+          .single();
 
-        if (updateError) throw updateError;
+        if (updateError) {
+          // Tratar erros específicos
+          if (updateError.code === '23505') {
+            // Violação de chave única
+            if (updateError.message.includes('email')) {
+              throw new Error("Este email já está cadastrado para outro funcionário.");
+            } else if (updateError.message.includes('cpf')) {
+              throw new Error("Este CPF já está cadastrado para outro funcionário.");
+            }
+          }
+          throw updateError;
+        }
 
         toast({
           title: "Funcionário atualizado!",
@@ -293,13 +488,30 @@ const EmployeeManagerComplete = () => {
         });
       } else {
         // Criar novo funcionário
-        const { error: insertError } = await supabase
+        const { data: insertedData, error: insertError } = await supabase
           .from("employees")
           .insert([employeeData])
           .select()
           .single();
 
-        if (insertError) throw insertError;
+        if (insertError) {
+          // Tratar erros específicos
+          if (insertError.code === '23505') {
+            // Violação de chave única
+            if (insertError.message.includes('email')) {
+              throw new Error("Este email já está cadastrado. Use um email diferente.");
+            } else if (insertError.message.includes('cpf')) {
+              throw new Error("Este CPF já está cadastrado. Verifique o número.");
+            }
+          } else if (insertError.code === '23502') {
+            // Violação de NOT NULL
+            throw new Error("Alguns campos obrigatórios não foram preenchidos corretamente.");
+          } else if (insertError.code === '23514') {
+            // Violação de CHECK constraint
+            throw new Error("Alguns dados não atendem aos requisitos do sistema.");
+          }
+          throw insertError;
+        }
 
         toast({
           title: "Funcionário cadastrado!",
@@ -314,18 +526,41 @@ const EmployeeManagerComplete = () => {
     } catch (error) {
       console.error("Erro ao salvar funcionário:", error);
       
-      let errorMessage = "Não foi possível salvar os dados";
+      let errorMessage = "Não foi possível salvar os dados do funcionário.";
+      
       if (error instanceof Error) {
-        if (error.message.includes("CPF inválido")) {
+        const errorMsg = error.message.toLowerCase();
+        
+        if (errorMsg.includes("cpf inválido") || errorMsg.includes("invalid cpf")) {
           errorMessage = "CPF inválido. Verifique o número e tente novamente.";
-        } else if (error.message.includes("duplicate key")) {
-          if (error.message.includes("email")) {
+        } else if (errorMsg.includes("email já") || errorMsg.includes("email já cadastrado") || (errorMsg.includes("duplicate key") && errorMsg.includes("email"))) {
+          errorMessage = "Este email já está cadastrado para outro funcionário. Use um email diferente.";
+        } else if (errorMsg.includes("cpf já") || errorMsg.includes("cpf já cadastrado") || (errorMsg.includes("duplicate key") && errorMsg.includes("cpf"))) {
+          errorMessage = "Este CPF já está cadastrado para outro funcionário. Verifique o número.";
+        } else if (errorMsg.includes("not null") || errorMsg.includes("null value")) {
+          errorMessage = "Alguns campos obrigatórios não foram preenchidos corretamente.";
+        } else if (errorMsg.includes("check constraint") || errorMsg.includes("violates check")) {
+          errorMessage = "Alguns dados não atendem aos requisitos do sistema. Verifique os campos preenchidos.";
+        } else if (errorMsg.includes("permission denied") || errorMsg.includes("row-level security") || errorMsg.includes("policy")) {
+          errorMessage = "Você não tem permissão para realizar esta operação. Verifique se você está logado corretamente.";
+        } else if (errorMsg.includes("network") || errorMsg.includes("fetch")) {
+          errorMessage = "Erro de conexão. Verifique sua internet e tente novamente.";
+        } else {
+          errorMessage = error.message || "Erro desconhecido ao salvar funcionário.";
+        }
+      } else if (typeof error === 'object' && error !== null) {
+        // Tratar erros do Supabase
+        const supabaseError = error as any;
+        if (supabaseError.code === '23505') {
+          if (supabaseError.message?.includes('email')) {
             errorMessage = "Este email já está cadastrado.";
-          } else if (error.message.includes("cpf")) {
+          } else if (supabaseError.message?.includes('cpf')) {
             errorMessage = "Este CPF já está cadastrado.";
           }
-        } else {
-          errorMessage = error.message;
+        } else if (supabaseError.code === '23502') {
+          errorMessage = "Campos obrigatórios não preenchidos.";
+        } else if (supabaseError.message) {
+          errorMessage = supabaseError.message;
         }
       }
 
@@ -472,11 +707,17 @@ const EmployeeManagerComplete = () => {
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Captura de Foto Facial */}
-              <FaceCapture
-                onCapture={(imageData) => setFormData({ ...formData, facePhoto: imageData })}
-                initialImage={formData.facePhoto}
-                required={!editingEmployee}
-              />
+              <div className="space-y-2">
+                <Label>Foto Facial (Opcional)</Label>
+                <FaceCapture
+                  onCapture={(imageData) => setFormData({ ...formData, facePhoto: imageData })}
+                  initialImage={formData.facePhoto}
+                  required={false}
+                />
+                <p className="text-xs text-muted-foreground">
+                  A foto facial é opcional, mas recomendada para o sistema de reconhecimento facial no registro de ponto.
+                </p>
+              </div>
 
               {/* Dados Pessoais */}
               <div className="space-y-4">
@@ -760,15 +1001,43 @@ const EmployeeManagerComplete = () => {
         <div className="text-center py-8">
           <p className="text-muted-foreground">Carregando funcionários...</p>
         </div>
-      ) : filteredEmployees.length === 0 ? (
+      ) : employees.length === 0 && !loading ? (
         <Card>
-          <CardContent className="p-8 text-center">
+          <CardContent className="p-8 text-center space-y-4">
             <User className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <p className="text-muted-foreground">
               {searchTerm || filterRole !== "all" || filterStatus !== "all"
                 ? "Nenhum funcionário encontrado com os filtros aplicados"
                 : "Nenhum funcionário cadastrado ainda"}
             </p>
+            <Button 
+              variant="outline" 
+              onClick={loadEmployees}
+              className="mt-4"
+            >
+              <Search className="h-4 w-4 mr-2" />
+              Tentar Carregar Novamente
+            </Button>
+          </CardContent>
+        </Card>
+      ) : filteredEmployees.length === 0 ? (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <User className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <p className="text-muted-foreground">
+              Nenhum funcionário encontrado com os filtros aplicados
+            </p>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setSearchTerm("");
+                setFilterRole("all");
+                setFilterStatus("all");
+              }}
+              className="mt-4"
+            >
+              Limpar Filtros
+            </Button>
           </CardContent>
         </Card>
       ) : (
