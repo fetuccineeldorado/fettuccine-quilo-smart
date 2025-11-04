@@ -210,3 +210,8 @@
 2025/11/04-00:50:54.427 4ac4 compacted to: files[ 0 1 1 0 0 0 0 ]
 2025/11/04-00:50:54.427 4ac4 Delete type=2 #971
 2025/11/04-00:50:54.428 4ac4 Manual compaction at level-0 from ' 3\x01\x00\x00\x05' @ 1236228 : 1 .. ' 4\x01\x00\x00\x00' @ 0 : 0; will stop at (end)
+2025/11/04-02:25:06.601 3bd0 Compacting 1@1 + 1@2 files
+2025/11/04-02:25:06.605 3bd0 Generated table #973@1: 941 keys, 35627 bytes
+2025/11/04-02:25:06.605 3bd0 Compacted 1@1 + 1@2 files => 35627 bytes
+2025/11/04-02:25:06.606 3bd0 compacted to: files[ 0 0 1 0 0 0 0 ]
+2025/11/04-02:25:06.606 3bd0 Delete type=2 #969

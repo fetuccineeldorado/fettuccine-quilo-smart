@@ -229,6 +229,98 @@ const Weighing = () => {
     return selectedExtraItems.reduce((total, item) => total + (item.price * item.quantity), 0);
   };
 
+  // Função auxiliar para validar e preparar dados dos itens extras
+  const prepareExtraItemsData = (orderId: string) => {
+    if (!orderId || typeof orderId !== 'string' || orderId.length === 0) {
+      throw new Error("ID da comanda inválido");
+    }
+
+    if (selectedExtraItems.length === 0) {
+      return [];
+    }
+
+    const extraItemsData: any[] = [];
+    
+    for (const item of selectedExtraItems) {
+      // Validações
+      if (!item.id || typeof item.id !== 'string' || item.id.length === 0) {
+        throw new Error(`Item extra "${item.name || 'Desconhecido'}" não possui ID válido`);
+      }
+      
+      if (!item.quantity || item.quantity <= 0 || !Number.isInteger(item.quantity)) {
+        throw new Error(`Quantidade inválida para item "${item.name || 'Desconhecido'}": ${item.quantity}`);
+      }
+      
+      if (!item.price || item.price <= 0 || isNaN(item.price)) {
+        throw new Error(`Preço inválido para item "${item.name || 'Desconhecido'}": ${item.price}`);
+      }
+      
+      const totalPrice = item.price * item.quantity;
+      if (isNaN(totalPrice) || totalPrice <= 0) {
+        throw new Error(`Total inválido para item "${item.name || 'Desconhecido'}": ${totalPrice}`);
+      }
+      
+      // Preparar dados validados
+      extraItemsData.push({
+        order_id: orderId,
+        extra_item_id: item.id,
+        quantity: Number(item.quantity), // Garantir que é número inteiro
+        unit_price: Number(item.price.toFixed(2)), // Arredondar para 2 decimais
+        total_price: Number(totalPrice.toFixed(2)), // Arredondar para 2 decimais
+      });
+    }
+
+    return extraItemsData;
+  };
+
+  // Função auxiliar para inserir itens extras
+  const insertExtraItems = async (orderId: string) => {
+    if (selectedExtraItems.length === 0) {
+      return;
+    }
+
+    try {
+      console.log('📦 Preparando para inserir itens extras:', selectedExtraItems);
+      
+      const extraItemsData = prepareExtraItemsData(orderId);
+      
+      console.log('📦 Dados preparados e validados para inserção:', extraItemsData);
+      
+      // Type assertion necessário pois order_extra_items não está nos tipos gerados
+      const { error: insertExtraError } = await (supabase.from("order_extra_items" as any).insert(extraItemsData) as any);
+      
+      if (insertExtraError) {
+        console.error('❌ Erro ao inserir itens extras:', insertExtraError);
+        console.error('Dados que tentaram ser inseridos:', extraItemsData);
+        
+        // Mensagem de erro mais específica
+        let errorMessage = "Erro ao inserir itens extras";
+        if (insertExtraError.message) {
+          errorMessage = insertExtraError.message;
+        } else if (insertExtraError.code) {
+          errorMessage = `Erro ${insertExtraError.code}: ${insertExtraError.message || "Erro desconhecido"}`;
+        }
+        
+        // Tratar erros específicos
+        if (insertExtraError.code === "23503" || insertExtraError.message?.includes("foreign key")) {
+          errorMessage = "Um ou mais itens extras não foram encontrados no banco de dados. Por favor, recarregue a página e tente novamente.";
+        } else if (insertExtraError.code === "23502" || insertExtraError.message?.includes("null value")) {
+          errorMessage = "Dados inválidos ao inserir itens extras. Verifique se todos os campos estão preenchidos corretamente.";
+        } else if (insertExtraError.code === "42501" || insertExtraError.message?.includes("permission")) {
+          errorMessage = "Você não tem permissão para inserir itens extras. Verifique se está autenticado corretamente.";
+        }
+        
+        throw new Error(errorMessage);
+      }
+      
+      console.log('✅ Itens extras inseridos com sucesso');
+      console.log('✅ Estoque será reduzido automaticamente pelo sistema');
+    } catch (error: any) {
+      console.error('💥 Erro ao inserir itens extras:', error);
+      throw error;
+    }
+  };
+
   const calculateTotal = () => {
     const weightNum = Number(weight);
     const foodTotal = weightNum * pricePerKg;
@@ -502,31 +594,7 @@ const Weighing = () => {
         if (updateError) throw updateError;
 
         // Create order items for extra items and reduce stock
-        if (selectedExtraItems.length > 0) {
-          console.log('📦 Preparando para inserir itens extras:', selectedExtraItems);
-          const extraItemsData = selectedExtraItems.map(item => ({
-            order_id: order.id,
-            extra_item_id: item.id,
-            quantity: item.quantity,
-            unit_price: item.price,
-            total_price: item.price * item.quantity,
-          }));
-
-          console.log('📦 Dados preparados para inserção:', extraItemsData);
-          // Type assertion necessário pois order_extra_items não está nos tipos gerados
-          const { error: insertExtraError } = await (supabase.from("order_extra_items" as any).insert(extraItemsData) as any);
-          
-          if (insertExtraError) {
-            console.error('❌ Erro ao inserir itens extras:', insertExtraError);
-            throw insertExtraError;
-          }
-          
-          console.log('✅ Itens extras inseridos com sucesso');
-
-          // Estoque será reduzido automaticamente pelo trigger do banco
-          // quando order_extra_items for inserido
-          console.log('✅ Estoque será reduzido automaticamente pelo sistema');
-        }
+        await insertExtraItems(order.id);
 
         toast({
           title: "Itens adicionados!",
@@ -590,31 +658,7 @@ const Weighing = () => {
         }
 
         // Create order items for extra items and reduce stock
-        if (selectedExtraItems.length > 0) {
-          console.log('📦 Preparando para inserir itens extras:', selectedExtraItems);
-          const extraItemsData = selectedExtraItems.map(item => ({
-            order_id: order.id,
-            extra_item_id: item.id,
-            quantity: item.quantity,
-            unit_price: item.price,
-            total_price: item.price * item.quantity,
-          }));
-
-          console.log('📦 Dados preparados para inserção:', extraItemsData);
-          // Type assertion necessário pois order_extra_items não está nos tipos gerados
-          const { error: insertExtraError } = await (supabase.from("order_extra_items" as any).insert(extraItemsData) as any);
-          
-          if (insertExtraError) {
-            console.error('❌ Erro ao inserir itens extras:', insertExtraError);
-            throw insertExtraError;
-          }
-          
-          console.log('✅ Itens extras inseridos com sucesso');
-
-          // Estoque será reduzido automaticamente pelo trigger do banco
-          // quando order_extra_items for inserido
-          console.log('✅ Estoque será reduzido automaticamente pelo sistema');
-        }
+        await insertExtraItems(order.id);
 
         toast({
           title: "Comanda criada!",
@@ -714,6 +758,23 @@ const Weighing = () => {
           setLoading(false);
           return;
         }
+      }
+
+      // Tratar erros específicos de itens extras
+      if (error instanceof Error && (
+        error.message.includes("Item extra") ||
+        error.message.includes("Quantidade inválida") ||
+        error.message.includes("Preço inválido") ||
+        error.message.includes("Total inválido") ||
+        error.message.includes("itens extras")
+      )) {
+        toast({
+          title: "Erro ao adicionar itens extras",
+          description: error.message,
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
       }
 
       // Log detalhado do erro para debug
