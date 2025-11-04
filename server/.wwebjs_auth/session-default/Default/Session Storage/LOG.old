@@ -1,4 +1,3 @@
-2025/11/04-00:50:44.284 bf0 Creating DB C:\Users\alexa\Desktop\ALEXANDRE\FETUCCINE\PDV\fettuccine-quilo-smart\server\.wwebjs_auth\session-default\Default\Session Storage since it was missing.
-2025/11/04-00:50:44.295 bf0 Reusing MANIFEST C:\Users\alexa\Desktop\ALEXANDRE\FETUCCINE\PDV\fettuccine-quilo-smart\server\.wwebjs_auth\session-default\Default\Session Storage/MANIFEST-000001
-2025/11/04-00:50:44.296 bf0 Recovering log #3
-2025/11/04-00:50:44.296 bf0 Reusing old log C:\Users\alexa\Desktop\ALEXANDRE\FETUCCINE\PDV\fettuccine-quilo-smart\server\.wwebjs_auth\session-default\Default\Session Storage/000003.log 
+2025/11/04-04:35:24.921 29cc Reusing MANIFEST C:\Users\alexa\Desktop\ALEXANDRE\FETUCCINE\PDV\fettuccine-quilo-smart\server\.wwebjs_auth\session-default\Default\Session Storage/MANIFEST-000001
+2025/11/04-04:35:24.921 29cc Recovering log #3
+2025/11/04-04:35:24.922 29cc Reusing old log C:\Users\alexa\Desktop\ALEXANDRE\FETUCCINE\PDV\fettuccine-quilo-smart\server\.wwebjs_auth\session-default\Default\Session Storage/000003.log 

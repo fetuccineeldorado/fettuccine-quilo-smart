@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import DashboardLayout from "@/components/DashboardLayout";
-import EmployeeManager from "@/components/EmployeeManager";
+import EmployeeManagerComplete from "@/components/EmployeeManagerComplete";
 import EmployeeReports from "@/components/EmployeeReports";
 import { UserPlus, BarChart3, Users, Settings } from "lucide-react";
 
@@ -36,7 +36,7 @@ const Employees = () => {
   const renderTabContent = () => {
     switch (activeTab) {
       case 'management':
-        return <EmployeeManager />;
+        return <EmployeeManagerComplete />;
       case 'reports':
         return <EmployeeReports />;
       case 'settings':
@@ -53,7 +53,7 @@ const Employees = () => {
           </Card>
         );
       default:
-        return <EmployeeManager />;
+        return <EmployeeManagerComplete />;
     }
   };
 
