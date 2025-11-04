@@ -1,3 +1,6 @@
 2025/11/04-00:50:52.292 5a90 Reusing MANIFEST C:\Users\alexa\Desktop\ALEXANDRE\FETUCCINE\PDV\fettuccine-quilo-smart\server\.wwebjs_auth\session-default\Default\Local Storage\leveldb/MANIFEST-000001
 2025/11/04-00:50:52.292 5a90 Recovering log #3
 2025/11/04-00:50:52.294 5a90 Reusing old log C:\Users\alexa\Desktop\ALEXANDRE\FETUCCINE\PDV\fettuccine-quilo-smart\server\.wwebjs_auth\session-default\Default\Local Storage\leveldb/000003.log 
+2025/11/04-02:11:03.729 d84 Level-0 table #5: started
+2025/11/04-02:11:03.731 d84 Level-0 table #5: 24927 bytes OK
+2025/11/04-02:11:03.732 d84 Delete type=0 #3

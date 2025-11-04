@@ -238,9 +238,13 @@ const Weighing = () => {
 
 
   const handleCreateOrder = async () => {
-    const finalCustomerName = selectedCustomer ? selectedCustomer.name : customerName.trim();
+    // Normalizar nome do cliente
+    const finalCustomerName = selectedCustomer 
+      ? (selectedCustomer.name || '').trim() 
+      : (customerName || '').trim();
     
-    if (!finalCustomerName && !addToExistingOrder) {
+    // Validar nome do cliente (apenas para novas comandas)
+    if (!addToExistingOrder && (!finalCustomerName || finalCustomerName.length === 0)) {
       toast({
         title: "Nome do cliente obrigatório",
         description: "Por favor, selecione um cliente ou digite o nome",
@@ -290,9 +294,22 @@ const Weighing = () => {
 
       // Validação crítica: verificar se há sessão ativa
       if (sessionError || !session?.user?.id) {
+        console.error('❌ Erro de sessão:', { sessionError, hasSession: !!session, hasUserId: !!session?.user?.id });
         toast({
           title: "Erro de autenticação",
           description: "Sessão inválida. Por favor, faça login novamente.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+      
+      // Validar que o user.id é um UUID válido
+      if (!session.user.id || typeof session.user.id !== 'string' || session.user.id.length === 0) {
+        console.error('❌ User ID inválido:', session.user.id);
+        toast({
+          title: "Erro de autenticação",
+          description: "ID do usuário inválido. Por favor, faça login novamente.",
           variant: "destructive",
         });
         setLoading(false);
@@ -351,13 +368,27 @@ const Weighing = () => {
         );
       });
 
-      const { data: settings } = await Promise.race([
+      const result = await Promise.race([
         settingsPromise.then((result) => {
           clearTimeout(settingsTimeout);
           return result;
         }),
         settingsTimeoutPromise,
       ]);
+      
+      // Verificar se houve erro na busca
+      if (result.error) {
+        console.error('❌ Erro ao buscar configurações:', result.error);
+        // Continuar com valores padrão se houver erro
+        // Mas mostrar aviso ao usuário
+        toast({
+          title: "Aviso",
+          description: "Não foi possível carregar as configurações do sistema. Usando valores padrão.",
+          variant: "default",
+        });
+      }
+      
+      const { data: settings } = result;
       
       // Validação de peso máximo (se configurado)
       if (settings?.maximum_weight && weightNum > Number(settings.maximum_weight)) {
@@ -370,12 +401,25 @@ const Weighing = () => {
         return;
       }
 
+      // Usar preço atualizado do sistema se disponível (definir antes das validações)
+      const finalPricePerKg = settings?.price_per_kg ? Number(settings.price_per_kg) : pricePerKg;
+      
+      // Validar que o preço é válido
+      if (!finalPricePerKg || isNaN(finalPricePerKg) || finalPricePerKg <= 0) {
+        toast({
+          title: "Erro de configuração",
+          description: "O preço por quilo não está configurado corretamente. Verifique as configurações do sistema.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+      
       // Validação de peso mínimo (verificar se atende cobrança mínima)
-      const currentPricePerKg = settings?.price_per_kg ? Number(settings.price_per_kg) : pricePerKg;
-      const calculatedFoodTotal = weightNum * currentPricePerKg;
+      const calculatedFoodTotal = weightNum * finalPricePerKg;
       
       if (settings?.minimum_charge && calculatedFoodTotal < Number(settings.minimum_charge)) {
-        const minWeight = Number(settings.minimum_charge) / currentPricePerKg;
+        const minWeight = Number(settings.minimum_charge) / finalPricePerKg;
         toast({
           title: "Peso abaixo do mínimo",
           description: `O peso mínimo para atender a cobrança mínima de R$ ${settings.minimum_charge} é ${minWeight.toFixed(3)} kg. Peso informado: ${weightNum.toFixed(3)} kg (valor: R$ ${calculatedFoodTotal.toFixed(2)})`,
@@ -384,12 +428,33 @@ const Weighing = () => {
         setLoading(false);
         return;
       }
-
-      // Usar preço atualizado do sistema se disponível
-      const finalPricePerKg = settings?.price_per_kg ? Number(settings.price_per_kg) : pricePerKg;
+      
       const foodTotal = weightNum * finalPricePerKg;
       const extraItemsTotal = calculateExtraItemsTotal();
+      
+      // Validar que os totais são números válidos
+      if (isNaN(foodTotal) || isNaN(extraItemsTotal)) {
+        toast({
+          title: "Erro de cálculo",
+          description: "Erro ao calcular os valores da comanda. Verifique os dados informados.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+      
       const total = foodTotal + extraItemsTotal;
+      
+      // Validar que o total é válido
+      if (isNaN(total) || total < 0) {
+        toast({
+          title: "Erro de cálculo",
+          description: "O valor total da comanda é inválido. Verifique os dados informados.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
 
       let order;
 
@@ -472,25 +537,45 @@ const Weighing = () => {
         await fetchOpenOrders();
       } else {
         // Create new order
+        // Garantir que customer_name não seja null ou vazio
+        const orderCustomerName = finalCustomerName && finalCustomerName.trim() ? finalCustomerName.trim() : null;
+        
+        // Preparar dados da comanda com validação
+        const orderData: any = {
+          status: "open",
+          customer_name: orderCustomerName,
+          total_weight: Number(weightNum.toFixed(3)),
+          food_total: Number(foodTotal.toFixed(2)),
+          extras_total: Number(extraItemsTotal.toFixed(2)),
+          total_amount: Number(total.toFixed(2)),
+          opened_by: session.user.id,
+        };
+        
+        // Validar dados antes de inserir
+        console.log('📝 Dados da comanda a serem inseridos:', orderData);
+        
+        if (orderData.total_weight < 0 || orderData.food_total < 0 || orderData.extras_total < 0 || orderData.total_amount < 0) {
+          throw new Error("Valores negativos não são permitidos na comanda");
+        }
+        
         const { data: newOrder, error } = await supabase
           .from("orders")
-          .insert({
-            status: "open",
-            customer_name: finalCustomerName,
-            total_weight: weightNum,
-            food_total: foodTotal,
-            extras_total: extraItemsTotal,
-            total_amount: total,
-            opened_by: session.user.id,
-          })
+          .insert(orderData)
           .select()
           .single();
 
-        if (error) throw error;
+        if (error) {
+          console.error('❌ Erro ao criar comanda:', error);
+          throw error;
+        }
+        
+        if (!newOrder) {
+          throw new Error("Comanda criada mas não retornada pelo banco de dados");
+        }
         order = newOrder;
 
         // Create order item for food
-        await supabase.from("order_items").insert({
+        const { error: insertItemError } = await supabase.from("order_items").insert({
           order_id: order.id,
           item_type: "food_weight",
           description: `Comida por quilo - ${weightNum}kg`,
@@ -498,6 +583,11 @@ const Weighing = () => {
           unit_price: finalPricePerKg,
           total_price: foodTotal,
         });
+
+        if (insertItemError) {
+          console.error('❌ Erro ao inserir item de comida:', insertItemError);
+          throw insertItemError;
+        }
 
         // Create order items for extra items and reduce stock
         if (selectedExtraItems.length > 0) {
@@ -598,9 +688,54 @@ const Weighing = () => {
         return;
       }
 
+      // Tratar erros de permissão (RLS)
+      if (error && typeof error === 'object' && 'code' in error) {
+        const errorCode = (error as any).code;
+        if (errorCode === "42501" || errorCode === "PGRST301" || (error as any).message?.includes("permission denied") || (error as any).message?.includes("policy")) {
+          toast({
+            title: "Erro de permissão",
+            description: "Você não tem permissão para criar comandas. Verifique se está autenticado corretamente.",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Tratar erros de validação do banco de dados
+      if (error && typeof error === 'object' && 'code' in error) {
+        const errorCode = (error as any).code;
+        if (errorCode === "23502" || errorCode === "PGRST116" || (error as any).message?.includes("null value") || (error as any).message?.includes("column")) {
+          toast({
+            title: "Erro de validação",
+            description: "Dados inválidos ao criar comanda. Verifique se todos os campos obrigatórios foram preenchidos.",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Log detalhado do erro para debug
+      console.error('💥 Erro detalhado ao processar comanda:', error);
+      if (error && typeof error === 'object') {
+        console.error('Código do erro:', (error as any).code);
+        console.error('Mensagem do erro:', (error as any).message);
+        console.error('Detalhes do erro:', (error as any).details);
+        console.error('Hint do erro:', (error as any).hint);
+      }
+
+      // Mensagem de erro genérico com mais informações
+      let errorMessage = "Erro desconhecido";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = String((error as any).message);
+      }
+
       toast({
         title: "Erro ao processar comanda",
-        description: error instanceof Error ? error.message : "Erro desconhecido",
+        description: errorMessage || "Ocorreu um erro inesperado. Verifique o console para mais detalhes.",
         variant: "destructive",
       });
     } finally {
