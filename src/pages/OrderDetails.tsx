@@ -236,16 +236,35 @@ const OrderDetails = () => {
       const foodItems = orderItems.filter(item => item.item_type === "food_weight");
       const extraItems = orderItems.filter(item => item.item_type === "extra");
 
-      // Gerar HTML com dados reais
+      // Formatação melhorada de data e hora
+      const date = order?.opened_at ? new Date(order.opened_at) : new Date();
+      const dateStr = date.toLocaleDateString('pt-BR', { 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: 'numeric' 
+      });
+      const timeStr = date.toLocaleTimeString('pt-BR', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        second: '2-digit'
+      });
+
+      // Gerar HTML com dados reais - melhor formatado
       const extraItemsHTML = extraItems.length > 0 ? `
-        <div>
-          <div class="bold">ITENS EXTRA:</div>
-          <div class="separator"></div>
-          ${extraItems.map(item => `
-            <div>${item.quantity}x ${item.description.split(' (x')[0]}</div>
-            <div>R$ ${item.unit_price.toFixed(2)} x ${item.quantity} = R$ ${item.total_price.toFixed(2)}</div>
-          `).join('')}
-          <div class="separator"></div>
+        <div class="section">
+          <div class="section-title">➕ Itens Extra</div>
+          ${extraItems.map((item, index) => {
+            const itemName = item.description.split(' (x')[0];
+            return `
+              <div class="item-row">
+                <div class="item-name">${index + 1}. ${item.quantity}x ${itemName.toUpperCase()}</div>
+                <div class="item-details">
+                  R$ ${item.unit_price.toFixed(2)} × ${item.quantity}
+                </div>
+                <div class="item-price">R$ ${item.total_price.toFixed(2)}</div>
+              </div>
+            `;
+          }).join('')}
         </div>
       ` : '';
 
@@ -253,60 +272,241 @@ const OrderDetails = () => {
         <html>
           <head>
             <title>Comanda #${order?.order_number}</title>
+            <meta charset="UTF-8">
             <style>
+              @media print {
+                body { margin: 0; padding: 15px; }
+                .no-print { display: none; }
+                @page { 
+                  size: 80mm auto;
+                  margin: 0;
+                }
+              }
+              * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+              }
               body { 
-                font-family: 'Courier New', monospace; 
-                font-size: 12px; 
-                max-width: 300px; 
+                font-family: 'Courier New', 'Consolas', monospace; 
+                font-size: 14px; 
+                max-width: 80mm; 
+                width: 80mm;
                 margin: 0 auto; 
-                padding: 10px;
+                padding: 15px 10px;
+                line-height: 1.6;
+                color: #000;
+                background: #fff;
+              }
+              .header {
+                text-align: center;
+                margin-bottom: 15px;
+                padding-bottom: 10px;
+                border-bottom: 3px double #000;
+              }
+              .header-title {
+                font-size: 24px;
+                font-weight: 900;
+                letter-spacing: 1px;
+                margin-bottom: 5px;
+                text-transform: uppercase;
+              }
+              .header-subtitle {
+                font-size: 14px;
+                font-weight: 600;
+                color: #333;
+                margin-top: 3px;
+              }
+              .order-info {
+                text-align: center;
+                margin: 15px 0;
+                padding: 10px 0;
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+              }
+              .order-number {
+                font-size: 28px;
+                font-weight: 900;
+                letter-spacing: 2px;
+                margin: 8px 0;
+                text-transform: uppercase;
+              }
+              .order-details {
+                font-size: 13px;
+                margin: 5px 0;
+                font-weight: 600;
+              }
+              .customer-name {
+                font-size: 16px;
+                font-weight: 700;
+                text-transform: uppercase;
+                margin: 8px 0;
+                color: #000;
+              }
+              .section {
+                margin: 15px 0;
+                padding: 10px 0;
+              }
+              .section-title {
+                font-size: 18px;
+                font-weight: 900;
+                margin-bottom: 10px;
+                text-transform: uppercase;
+                border-bottom: 2px dashed #000;
+                padding-bottom: 5px;
+              }
+              .item-row {
+                margin: 8px 0;
+                padding: 5px 0;
+                border-bottom: 1px dotted #ccc;
+              }
+              .item-name {
+                font-size: 15px;
+                font-weight: 700;
+                margin-bottom: 3px;
+                text-transform: uppercase;
+              }
+              .item-details {
+                font-size: 12px;
+                margin-left: 10px;
+                color: #444;
+              }
+              .item-price {
+                font-size: 14px;
+                font-weight: 700;
+                margin-top: 3px;
+                text-align: right;
+              }
+              .summary {
+                margin: 20px 0;
+                padding: 15px 0;
+                border-top: 3px double #000;
+                border-bottom: 3px double #000;
+              }
+              .summary-title {
+                font-size: 20px;
+                font-weight: 900;
+                text-align: center;
+                margin-bottom: 15px;
+                text-transform: uppercase;
+              }
+              .summary-row {
+                display: flex;
+                justify-content: space-between;
+                margin: 8px 0;
+                font-size: 14px;
+                font-weight: 600;
+              }
+              .summary-label {
+                text-align: left;
+              }
+              .summary-value {
+                text-align: right;
+                font-weight: 700;
+              }
+              .total-row {
+                margin-top: 15px;
+                padding-top: 15px;
+                border-top: 2px solid #000;
+                font-size: 22px;
+                font-weight: 900;
+                text-transform: uppercase;
+              }
+              .total-label {
+                text-align: center;
+                font-size: 18px;
+                margin-bottom: 5px;
+              }
+              .total-value {
+                text-align: center;
+                font-size: 28px;
+                letter-spacing: 2px;
+              }
+              .footer {
+                text-align: center;
+                margin-top: 20px;
+                padding-top: 15px;
+                border-top: 2px dashed #000;
+                font-size: 13px;
+              }
+              .footer-message {
+                font-size: 15px;
+                font-weight: 700;
+                margin: 8px 0;
+              }
+              .footer-thanks {
+                font-size: 12px;
+                margin: 5px 0;
+                color: #555;
+              }
+              .separator {
+                border-bottom: 1px dashed #000;
+                margin: 10px 0;
+              }
+              .double-separator {
+                border-top: 3px double #000;
+                border-bottom: 3px double #000;
+                margin: 15px 0;
+                padding: 5px 0;
               }
               .center { text-align: center; }
               .bold { font-weight: bold; }
-              .separator { border-bottom: 1px dashed #000; margin: 5px 0; }
             </style>
           </head>
           <body>
-            <div class="center">
-              <div class="bold" style="font-size: 18px;">FETTUCCINE ELDORADO</div>
-              <div>Sistema de Pesagem por Quilo</div>
-              <div class="separator"></div>
+            <div class="header">
+              <div class="header-title">FETTUCCINE ELDORADO</div>
+              <div class="header-subtitle">Sistema de Pesagem por Quilo</div>
+              <div class="header-subtitle">Comida Caseira de Qualidade</div>
             </div>
             
-            <div class="center">
-              <div class="bold" style="font-size: 16px;">COMANDA #${order?.order_number}</div>
-              <div>Cliente: ${order?.customer_name}</div>
-              <div>Data: ${new Date().toLocaleString('pt-BR')}</div>
-              <div class="separator"></div>
+            <div class="order-info">
+              <div class="order-number">COMANDA #${order?.order_number?.toString().padStart(4, '0') || '0000'}</div>
+              <div class="customer-name">${(order?.customer_name || 'Cliente').toUpperCase()}</div>
+              <div class="order-details">Data: ${dateStr} às ${timeStr}</div>
             </div>
             
-            <div>
-              <div class="bold">ITENS DA COMANDA:</div>
-              <div class="separator"></div>
+            <div class="section">
+              <div class="section-title">📋 Itens da Comanda</div>
               ${foodItems.map(item => `
-                <div>${item.description}</div>
-                <div>Peso: ${item.quantity} kg</div>
-                <div>Preço/kg: R$ ${item.unit_price.toFixed(2)}</div>
-                <div class="bold">Subtotal: R$ ${item.total_price.toFixed(2)}</div>
-                <div class="separator"></div>
+                <div class="item-row">
+                  <div class="item-name">🍽️ ${item.description.toUpperCase()}</div>
+                  <div class="item-details">
+                    Peso: ${item.quantity.toFixed(3)} kg<br>
+                    Preço/kg: R$ ${item.unit_price.toFixed(2)}
+                  </div>
+                  <div class="item-price">Subtotal: R$ ${item.total_price.toFixed(2)}</div>
+                </div>
               `).join('')}
             </div>
             
             ${extraItemsHTML}
             
-            <div class="center">
-              <div class="bold" style="font-size: 16px;">RESUMO:</div>
-              <div class="separator"></div>
-              <div>Comida: R$ ${order?.food_total.toFixed(2)}</div>
-              ${order?.extras_total > 0 ? `<div>Itens Extra: R$ ${order?.extras_total.toFixed(2)}</div>` : ''}
-              <div class="separator"></div>
-              <div class="bold" style="font-size: 18px;">TOTAL: R$ ${order?.total_amount.toFixed(2)}</div>
-              <div class="separator"></div>
+            <div class="summary">
+              <div class="summary-title">💰 Resumo Financeiro</div>
+              <div class="summary-row">
+                <span class="summary-label">Comida por Quilo:</span>
+                <span class="summary-value">R$ ${(order?.food_total || 0).toFixed(2)}</span>
+              </div>
+              ${(order?.extras_total || 0) > 0 ? `
+              <div class="summary-row">
+                <span class="summary-label">Itens Extra:</span>
+                <span class="summary-value">R$ ${(order?.extras_total || 0).toFixed(2)}</span>
+              </div>
+              ` : ''}
+              <div class="double-separator"></div>
+              <div class="total-row">
+                <div class="total-label">TOTAL</div>
+                <div class="total-value">R$ ${(order?.total_amount || 0).toFixed(2)}</div>
+              </div>
             </div>
             
-            <div class="center">
-              <div>Obrigado pela preferência!</div>
-              <div>Volte sempre!</div>
+            <div class="footer">
+              <div class="footer-message">✨ Obrigado pela preferência! ✨</div>
+              <div class="footer-thanks">Volte sempre!</div>
+              <div class="footer-thanks">Avalie nosso atendimento</div>
+              <div class="separator"></div>
+              <div class="footer-thanks">Comanda #${order?.order_number?.toString().padStart(4, '0') || '0000'} - ${dateStr}</div>
             </div>
           </body>
         </html>

@@ -46,105 +46,156 @@ export class ThermalPrinter {
   static generateReceipt(orderData: OrderData): string {
     let receipt = '';
 
-    // Cabeçalho
+    // Espaçamento inicial
+    receipt += this.FEED;
+    receipt += this.FEED;
+
+    // Cabeçalho melhorado
     receipt += this.CENTER;
     receipt += this.BOLD;
     receipt += this.EXTRA_LARGE;
+    receipt += '═══════════════════════════\n';
     receipt += 'FETTUCCINE ELDORADO\n';
+    receipt += '═══════════════════════════\n';
     receipt += this.NORMAL;
     receipt += this.MEDIUM;
     receipt += 'Sistema de Pesagem por Quilo\n';
-    receipt += '================================\n';
+    receipt += 'Comida Caseira de Qualidade\n';
+    receipt += '═══════════════════════════\n';
+    receipt += this.FEED;
     receipt += this.FEED;
 
-    // Dados da comanda
+    // Dados da comanda - melhor formatados
     receipt += this.CENTER;
     receipt += this.BOLD;
-    receipt += this.LARGE;
-    receipt += `COMANDA #${orderData.order_number.toString().padStart(3, '0')}\n`;
+    receipt += this.EXTRA_LARGE;
+    receipt += '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+    receipt += `COMANDA #${orderData.order_number.toString().padStart(4, '0')}\n`;
+    receipt += '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
     receipt += this.NORMAL;
     receipt += this.MEDIUM;
-    receipt += `Cliente: ${orderData.customer_name}\n`;
-    receipt += `Data: ${new Date(orderData.created_at).toLocaleString('pt-BR')}\n`;
-    receipt += '================================\n';
+    receipt += this.FEED;
+    receipt += `Cliente: ${orderData.customer_name.toUpperCase()}\n`;
+    
+    const date = new Date(orderData.created_at);
+    const dateStr = date.toLocaleDateString('pt-BR', { 
+      day: '2-digit', 
+      month: '2-digit', 
+      year: 'numeric' 
+    });
+    const timeStr = date.toLocaleTimeString('pt-BR', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+    receipt += `Data: ${dateStr} às ${timeStr}\n`;
+    receipt += '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+    receipt += this.FEED;
     receipt += this.FEED;
 
-    // Itens da comanda
+    // Itens da comanda - melhor formatados
     receipt += this.LEFT;
     receipt += this.BOLD;
-    receipt += this.MEDIUM;
-    receipt += 'ITENS DA COMANDA:\n';
+    receipt += this.LARGE;
+    receipt += '📋 ITENS DA COMANDA\n';
     receipt += this.NORMAL;
-    receipt += this.SMALL;
-    receipt += '--------------------------------\n';
+    receipt += '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+    receipt += this.FEED;
 
     // Comida por quilo
     if (orderData.items.length > 0) {
       const foodItem = orderData.items[0];
-      receipt += this.MEDIUM;
-      receipt += `${foodItem.description}\n`;
-      receipt += this.SMALL;
-      receipt += `Peso: ${orderData.total_weight.toFixed(3)} kg\n`;
-      receipt += `Preço/kg: R$ ${foodItem.unit_price.toFixed(2)}\n`;
       receipt += this.BOLD;
-      receipt += `Subtotal: R$ ${foodItem.total_price.toFixed(2)}\n`;
+      receipt += this.MEDIUM;
+      receipt += `🍽️  ${foodItem.description.toUpperCase()}\n`;
       receipt += this.NORMAL;
-      receipt += '--------------------------------\n';
+      receipt += this.SMALL;
+      receipt += this.FEED;
+      receipt += '   ┌─────────────────────────┐\n';
+      receipt += `   │ Peso: ${orderData.total_weight.toFixed(3).padStart(8)} kg  │\n`;
+      receipt += `   │ Preço/kg: R$ ${foodItem.unit_price.toFixed(2).padStart(8)} │\n`;
+      receipt += '   └─────────────────────────┘\n';
+      receipt += this.BOLD;
+      receipt += this.MEDIUM;
+      receipt += `   Subtotal: R$ ${foodItem.total_price.toFixed(2).padStart(10)}\n`;
+      receipt += this.NORMAL;
+      receipt += this.FEED;
+      receipt += '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+      receipt += this.FEED;
     }
 
-    // Itens extra
+    // Itens extra - melhor formatados
     console.log('Processando itens extra:', orderData.extra_items);
     console.log('Quantidade de itens extra:', orderData.extra_items.length);
     
     if (orderData.extra_items.length > 0) {
       receipt += this.BOLD;
-      receipt += this.MEDIUM;
-      receipt += 'ITENS EXTRA:\n';
+      receipt += this.LARGE;
+      receipt += '➕ ITENS EXTRA\n';
       receipt += this.NORMAL;
-      receipt += this.SMALL;
-      orderData.extra_items.forEach(item => {
+      receipt += '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+      receipt += this.FEED;
+      
+      orderData.extra_items.forEach((item, index) => {
         console.log('Processando item extra:', item);
-        receipt += this.MEDIUM;
-        receipt += `${item.quantity}x ${item.name}\n`;
-        receipt += this.SMALL;
-        receipt += `R$ ${item.unit_price.toFixed(2)} x ${item.quantity} = `;
         receipt += this.BOLD;
-        receipt += `R$ ${item.total_price.toFixed(2)}\n`;
+        receipt += this.MEDIUM;
+        receipt += `   ${index + 1}. ${item.quantity}x ${item.name.toUpperCase()}\n`;
         receipt += this.NORMAL;
+        receipt += this.SMALL;
+        receipt += `      R$ ${item.unit_price.toFixed(2).padStart(6)} × ${item.quantity.toString().padStart(2)} = `;
+        receipt += this.BOLD;
+        receipt += `R$ ${item.total_price.toFixed(2).padStart(8)}\n`;
+        receipt += this.NORMAL;
+        receipt += this.FEED;
       });
-      receipt += '--------------------------------\n';
+      
+      receipt += '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+      receipt += this.FEED;
     } else {
       console.log('Nenhum item extra encontrado para impressão');
     }
 
-    // Totais
+    // Totais - muito mais destacados
     receipt += this.FEED;
     receipt += this.CENTER;
-    receipt += this.BOLD;
-    receipt += this.LARGE;
-    receipt += 'RESUMO:\n';
-    receipt += this.NORMAL;
-    receipt += this.MEDIUM;
-    receipt += '--------------------------------\n';
-    receipt += `Comida: R$ ${orderData.food_total.toFixed(2)}\n`;
-    if (orderData.extra_items_total > 0) {
-      receipt += `Itens Extra: R$ ${orderData.extra_items_total.toFixed(2)}\n`;
-    }
-    receipt += '--------------------------------\n';
     receipt += this.BOLD;
     receipt += this.EXTRA_LARGE;
-    receipt += `TOTAL: R$ ${orderData.total_amount.toFixed(2)}\n`;
+    receipt += '═══════════════════════════\n';
+    receipt += '💰 RESUMO FINANCEIRO\n';
+    receipt += '═══════════════════════════\n';
+    receipt += this.NORMAL;
+    receipt += this.MEDIUM;
+    receipt += this.FEED;
+    receipt += '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+    receipt += `Comida por Quilo: R$ ${orderData.food_total.toFixed(2).padStart(10)}\n`;
+    if (orderData.extra_items_total > 0) {
+      receipt += `Itens Extra:      R$ ${orderData.extra_items_total.toFixed(2).padStart(10)}\n`;
+    }
+    receipt += '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+    receipt += this.FEED;
+    receipt += this.BOLD;
+    receipt += this.EXTRA_LARGE;
+    receipt += '═══════════════════════════\n';
+    receipt += `TOTAL: R$ ${orderData.total_amount.toFixed(2).padStart(12)}\n`;
+    receipt += '═══════════════════════════\n';
     receipt += this.NORMAL;
     receipt += this.SMALL;
-
-    // Rodapé
     receipt += this.FEED;
+    receipt += this.FEED;
+
+    // Rodapé melhorado
     receipt += this.CENTER;
-    receipt += '================================\n';
+    receipt += '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
     receipt += this.MEDIUM;
-    receipt += 'Obrigado pela preferência!\n';
+    receipt += this.BOLD;
+    receipt += '✨ Obrigado pela preferência! ✨\n';
+    receipt += this.NORMAL;
     receipt += 'Volte sempre!\n';
+    receipt += 'Avalie nosso atendimento\n';
+    receipt += '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
     receipt += this.SMALL;
+    receipt += `Comanda #${orderData.order_number.toString().padStart(4, '0')} - ${new Date(orderData.created_at).toLocaleDateString('pt-BR')}\n`;
+    receipt += this.FEED;
     receipt += this.FEED;
     receipt += this.FEED;
     receipt += this.FEED;
@@ -587,28 +638,45 @@ export class ThermalPrinter {
         return false;
       }
 
-      // Gerar HTML com dados reais e validação
+      // Gerar HTML com dados reais e validação - melhor formatado
       const extraItemsHTML = validExtraItems.length > 0 ? `
-        <div>
-          <div class="bold">ITENS EXTRA:</div>
-          <div class="separator"></div>
-          ${validExtraItems.map(item => {
+        <div class="section">
+          <div class="section-title">➕ Itens Extra</div>
+          ${validExtraItems.map((item, index) => {
             if (!item || !item.name || !item.quantity || !item.price) {
               console.warn('Item extra inválido ignorado:', item);
               return '';
             }
+            const total = Number(item.price) * item.quantity;
             return `
-              <div>${item.quantity}x ${item.name}</div>
-              <div>R$ ${Number(item.price).toFixed(2)} x ${item.quantity} = R$ ${(Number(item.price) * item.quantity).toFixed(2)}</div>
+              <div class="item-row">
+                <div class="item-name">${index + 1}. ${item.quantity}x ${item.name.toUpperCase()}</div>
+                <div class="item-details">
+                  R$ ${Number(item.price).toFixed(2)} × ${item.quantity}
+                </div>
+                <div class="item-price">R$ ${total.toFixed(2)}</div>
+              </div>
             `;
           }).filter(html => html !== '').join('')}
-          <div class="separator"></div>
         </div>
       ` : '';
 
       // Calcular preço por kg com validação
       const pricePerKg = weight > 0 ? (foodTotal / weight) : 0;
       console.log('Preço por kg calculado:', pricePerKg);
+
+      // Formatação melhorada de data e hora
+      const date = new Date();
+      const dateStr = date.toLocaleDateString('pt-BR', { 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: 'numeric' 
+      });
+      const timeStr = date.toLocaleTimeString('pt-BR', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        second: '2-digit'
+      });
 
       const htmlContent = `
         <html>
@@ -617,64 +685,236 @@ export class ThermalPrinter {
             <meta charset="UTF-8">
             <style>
               @media print {
-                body { margin: 0; }
+                body { margin: 0; padding: 15px; }
                 .no-print { display: none; }
+                @page { 
+                  size: 80mm auto;
+                  margin: 0;
+                }
+              }
+              * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
               }
               body { 
-                font-family: 'Courier New', monospace; 
-                font-size: 12px; 
-                max-width: 300px; 
+                font-family: 'Courier New', 'Consolas', monospace; 
+                font-size: 14px; 
+                max-width: 80mm; 
+                width: 80mm;
                 margin: 0 auto; 
-                padding: 10px;
-                line-height: 1.2;
+                padding: 15px 10px;
+                line-height: 1.6;
+                color: #000;
+                background: #fff;
+              }
+              .header {
+                text-align: center;
+                margin-bottom: 15px;
+                padding-bottom: 10px;
+                border-bottom: 3px double #000;
+              }
+              .header-title {
+                font-size: 24px;
+                font-weight: 900;
+                letter-spacing: 1px;
+                margin-bottom: 5px;
+                text-transform: uppercase;
+              }
+              .header-subtitle {
+                font-size: 14px;
+                font-weight: 600;
+                color: #333;
+                margin-top: 3px;
+              }
+              .order-info {
+                text-align: center;
+                margin: 15px 0;
+                padding: 10px 0;
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+              }
+              .order-number {
+                font-size: 28px;
+                font-weight: 900;
+                letter-spacing: 2px;
+                margin: 8px 0;
+                text-transform: uppercase;
+              }
+              .order-details {
+                font-size: 13px;
+                margin: 5px 0;
+                font-weight: 600;
+              }
+              .customer-name {
+                font-size: 16px;
+                font-weight: 700;
+                text-transform: uppercase;
+                margin: 8px 0;
+                color: #000;
+              }
+              .section {
+                margin: 15px 0;
+                padding: 10px 0;
+              }
+              .section-title {
+                font-size: 18px;
+                font-weight: 900;
+                margin-bottom: 10px;
+                text-transform: uppercase;
+                border-bottom: 2px dashed #000;
+                padding-bottom: 5px;
+              }
+              .item-row {
+                margin: 8px 0;
+                padding: 5px 0;
+                border-bottom: 1px dotted #ccc;
+              }
+              .item-name {
+                font-size: 15px;
+                font-weight: 700;
+                margin-bottom: 3px;
+                text-transform: uppercase;
+              }
+              .item-details {
+                font-size: 12px;
+                margin-left: 10px;
+                color: #444;
+              }
+              .item-price {
+                font-size: 14px;
+                font-weight: 700;
+                margin-top: 3px;
+                text-align: right;
+              }
+              .summary {
+                margin: 20px 0;
+                padding: 15px 0;
+                border-top: 3px double #000;
+                border-bottom: 3px double #000;
+              }
+              .summary-title {
+                font-size: 20px;
+                font-weight: 900;
+                text-align: center;
+                margin-bottom: 15px;
+                text-transform: uppercase;
+              }
+              .summary-row {
+                display: flex;
+                justify-content: space-between;
+                margin: 8px 0;
+                font-size: 14px;
+                font-weight: 600;
+              }
+              .summary-label {
+                text-align: left;
+              }
+              .summary-value {
+                text-align: right;
+                font-weight: 700;
+              }
+              .total-row {
+                margin-top: 15px;
+                padding-top: 15px;
+                border-top: 2px solid #000;
+                font-size: 22px;
+                font-weight: 900;
+                text-transform: uppercase;
+              }
+              .total-label {
+                text-align: center;
+                font-size: 18px;
+                margin-bottom: 5px;
+              }
+              .total-value {
+                text-align: center;
+                font-size: 28px;
+                letter-spacing: 2px;
+              }
+              .footer {
+                text-align: center;
+                margin-top: 20px;
+                padding-top: 15px;
+                border-top: 2px dashed #000;
+                font-size: 13px;
+              }
+              .footer-message {
+                font-size: 15px;
+                font-weight: 700;
+                margin: 8px 0;
+              }
+              .footer-thanks {
+                font-size: 12px;
+                margin: 5px 0;
+                color: #555;
+              }
+              .separator {
+                border-bottom: 1px dashed #000;
+                margin: 10px 0;
+              }
+              .double-separator {
+                border-top: 3px double #000;
+                border-bottom: 3px double #000;
+                margin: 15px 0;
+                padding: 5px 0;
               }
               .center { text-align: center; }
               .bold { font-weight: bold; }
-              .separator { border-bottom: 1px dashed #000; margin: 5px 0; }
-              .large { font-size: 16px; }
-              .medium { font-size: 14px; }
-              .small { font-size: 10px; }
             </style>
           </head>
           <body>
-            <div class="center">
-              <div class="bold large">FETTUCCINE ELDORADO</div>
-              <div class="medium">Sistema de Pesagem por Quilo</div>
-              <div class="separator"></div>
+            <div class="header">
+              <div class="header-title">FETTUCCINE ELDORADO</div>
+              <div class="header-subtitle">Sistema de Pesagem por Quilo</div>
+              <div class="header-subtitle">Comida Caseira de Qualidade</div>
             </div>
             
-            <div class="center">
-              <div class="bold large">COMANDA #${order.order_number}</div>
-              <div>Cliente: ${customerName}</div>
-              <div>Data: ${new Date().toLocaleString('pt-BR')}</div>
-              <div class="separator"></div>
+            <div class="order-info">
+              <div class="order-number">COMANDA #${order.order_number.toString().padStart(4, '0')}</div>
+              <div class="customer-name">${customerName.toUpperCase()}</div>
+              <div class="order-details">Data: ${dateStr} às ${timeStr}</div>
             </div>
             
-            <div>
-              <div class="bold">ITENS DA COMANDA:</div>
-              <div class="separator"></div>
-              <div>Comida por quilo - ${Number(weight).toFixed(3)}kg</div>
-              <div>Peso: ${Number(weight).toFixed(3)} kg</div>
-              <div>Preço/kg: R$ ${Number(pricePerKg).toFixed(2)}</div>
-              <div class="bold">Subtotal: R$ ${Number(foodTotal).toFixed(2)}</div>
-              <div class="separator"></div>
+            <div class="section">
+              <div class="section-title">📋 Itens da Comanda</div>
+              <div class="item-row">
+                <div class="item-name">🍽️ Comida por Quilo</div>
+                <div class="item-details">
+                  Peso: ${Number(weight).toFixed(3)} kg<br>
+                  Preço/kg: R$ ${Number(pricePerKg).toFixed(2)}
+                </div>
+                <div class="item-price">Subtotal: R$ ${Number(foodTotal).toFixed(2)}</div>
+              </div>
             </div>
             
             ${extraItemsHTML}
             
-            <div class="center">
-              <div class="bold large">RESUMO:</div>
-              <div class="separator"></div>
-              <div>Comida: R$ ${Number(foodTotal).toFixed(2)}</div>
-              ${Number(extraItemsTotal) > 0 ? `<div>Itens Extra: R$ ${Number(extraItemsTotal).toFixed(2)}</div>` : ''}
-              <div class="separator"></div>
-              <div class="bold large">TOTAL: R$ ${Number(foodTotal + extraItemsTotal).toFixed(2)}</div>
-              <div class="separator"></div>
+            <div class="summary">
+              <div class="summary-title">💰 Resumo Financeiro</div>
+              <div class="summary-row">
+                <span class="summary-label">Comida por Quilo:</span>
+                <span class="summary-value">R$ ${Number(foodTotal).toFixed(2)}</span>
+              </div>
+              ${Number(extraItemsTotal) > 0 ? `
+              <div class="summary-row">
+                <span class="summary-label">Itens Extra:</span>
+                <span class="summary-value">R$ ${Number(extraItemsTotal).toFixed(2)}</span>
+              </div>
+              ` : ''}
+              <div class="double-separator"></div>
+              <div class="total-row">
+                <div class="total-label">TOTAL</div>
+                <div class="total-value">R$ ${Number(foodTotal + extraItemsTotal).toFixed(2)}</div>
+              </div>
             </div>
             
-            <div class="center">
-              <div>Obrigado pela preferência!</div>
-              <div>Volte sempre!</div>
+            <div class="footer">
+              <div class="footer-message">✨ Obrigado pela preferência! ✨</div>
+              <div class="footer-thanks">Volte sempre!</div>
+              <div class="footer-thanks">Avalie nosso atendimento</div>
+              <div class="separator"></div>
+              <div class="footer-thanks">Comanda #${order.order_number.toString().padStart(4, '0')} - ${dateStr}</div>
             </div>
           </body>
         </html>
