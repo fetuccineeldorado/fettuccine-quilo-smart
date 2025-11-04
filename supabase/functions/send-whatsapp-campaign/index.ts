@@ -31,7 +31,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
 
-    const { campaignId, messageContent } = await req.json();
+    const { campaignId, messageContent, media } = await req.json();
 
     console.log('Iniciando envio de campanha:', campaignId);
 
@@ -46,7 +46,26 @@ serve(async (req) => {
       throw new Error('Campanha não encontrada');
     }
 
-    // 2. Buscar conexão WhatsApp ativa
+    // 2. Buscar mídia da promoção se não fornecida
+    let finalMedia = media;
+    if (!finalMedia && campaign.promotion_id) {
+      const { data: promotion } = await supabaseClient
+        .from('promotions')
+        .select('media_url, media_type, media_filename, media_mime_type')
+        .eq('id', campaign.promotion_id)
+        .maybeSingle();
+
+      if (promotion && promotion.media_url && promotion.media_type) {
+        finalMedia = {
+          url: promotion.media_url,
+          type: promotion.media_type as 'image' | 'video' | 'audio',
+          mimeType: promotion.media_mime_type,
+          filename: promotion.media_filename,
+        };
+      }
+    }
+
+    // 3. Buscar conexão WhatsApp ativa
     const { data: connection, error: connError } = await supabaseClient
       .from('whatsapp_connections')
       .select('*')
@@ -59,7 +78,7 @@ serve(async (req) => {
       throw new Error('Nenhuma conexão WhatsApp ativa');
     }
 
-    // 3. Atualizar status da campanha para "sending"
+    // 4. Atualizar status da campanha para "sending"
     await supabaseClient
       .from('promotion_campaigns')
       .update({
@@ -68,7 +87,7 @@ serve(async (req) => {
       })
       .eq('id', campaignId);
 
-    // 4. Buscar destinatários pendentes
+    // 5. Buscar destinatários pendentes
     const { data: recipients, error: recipientsError } = await supabaseClient
       .from('campaign_recipients')
       .select('*')
@@ -85,7 +104,7 @@ serve(async (req) => {
     let failedCount = 0;
     const backendUrl = connection.api_url || 'http://localhost:3001';
 
-    // 5. Enviar em batches
+    // 6. Enviar em batches
     for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
       const batch = recipients.slice(i, i + BATCH_SIZE);
 
@@ -104,6 +123,10 @@ serve(async (req) => {
               instanceId: connection.instance_id,
               to: formattedNumber,
               message: messageContent,
+              mediaUrl: finalMedia?.url,
+              mediaType: finalMedia?.type,
+              mediaMimeType: finalMedia?.mimeType,
+              mediaFilename: finalMedia?.filename,
             }),
           });
 
@@ -145,7 +168,7 @@ serve(async (req) => {
       }
     }
 
-    // 6. Atualizar estatísticas da campanha
+    // 7. Atualizar estatísticas da campanha
     await supabaseClient
       .from('promotion_campaigns')
       .update({

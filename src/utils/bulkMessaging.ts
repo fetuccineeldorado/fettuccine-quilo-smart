@@ -254,7 +254,8 @@ class BulkMessagingService {
   async sendCampaign(
     campaignId: string,
     messageContent: string,
-    onProgress?: (progress: { sent: number; total: number; failed: number }) => void
+    onProgress?: (progress: { sent: number; total: number; failed: number }) => void,
+    media?: { file: File; type: 'image' | 'video' | 'audio'; url?: string }
   ): Promise<SendResult> {
     try {
       // Buscar campanha
@@ -271,6 +272,24 @@ class BulkMessagingService {
           totalFailed: 0,
           errors: ['Campanha não encontrada']
         };
+      }
+
+      // Se não houver mídia passada como parâmetro, buscar da promoção
+      let finalMedia = media;
+      if (!finalMedia && campaign.promotion_id) {
+        const { data: promotion } = await supabase
+          .from('promotions')
+          .select('media_url, media_type, media_filename, media_mime_type')
+          .eq('id', campaign.promotion_id)
+          .maybeSingle();
+
+        if (promotion && promotion.media_url && promotion.media_type) {
+          finalMedia = {
+            file: null as any, // Não temos o arquivo, apenas a URL
+            type: promotion.media_type as 'image' | 'video' | 'audio',
+            url: promotion.media_url,
+          };
+        }
       }
 
       // Atualizar status para "sending"
@@ -312,6 +331,11 @@ class BulkMessagingService {
             const result = await whatsappService.sendMessage({
               to: recipient.whatsapp_number,
               message: messageContent,
+              mediaUrl: finalMedia?.url,
+              mediaType: finalMedia?.type,
+              mediaFile: finalMedia?.file,
+              mediaMimeType: finalMedia?.file?.type,
+              mediaFilename: finalMedia?.file?.name,
             });
 
             if (result.success) {

@@ -7,7 +7,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 // Usar a versão local da pasta zap ao invés do npm package
-const { Client, LocalAuth } = require(path.join(__dirname, '../zap'));
+const { Client, LocalAuth, MessageMedia } = require(path.join(__dirname, '../zap'));
 const qrcode = require('qrcode');
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -258,10 +258,10 @@ app.delete('/api/whatsapp/disconnect/:instanceId', async (req, res) => {
   }
 });
 
-// Endpoint: Enviar mensagem
+// Endpoint: Enviar mensagem (com suporte a mídia)
 app.post('/api/whatsapp/send', async (req, res) => {
   try {
-    const { instanceId, to, message } = req.body;
+    const { instanceId, to, message, mediaUrl, mediaType, mediaBase64, mediaMimeType, mediaFilename } = req.body;
 
     if (!instanceId || !to || !message) {
       return res.status(400).json({
@@ -282,7 +282,84 @@ app.post('/api/whatsapp/send', async (req, res) => {
     const number = to.replace(/\D/g, '');
     const chatId = `${number}@c.us`;
 
-    const result = await client.sendMessage(chatId, message);
+    let result;
+
+    // Se houver mídia, enviar com mídia
+    if (mediaUrl || mediaBase64) {
+      const mediaTypeLower = (mediaType || 'image').toLowerCase();
+      
+      try {
+        // Preparar dados da mídia
+        let mediaData;
+        let mediaOptions = {};
+
+        if (mediaBase64) {
+          // Converter base64 para Buffer (Buffer é global no Node.js)
+          mediaData = Buffer.from(mediaBase64, 'base64');
+          mediaOptions = {
+            mimetype: mediaMimeType || getMimeTypeFromFilename(mediaFilename) || 'image/jpeg',
+            filename: mediaFilename || `media.${mediaTypeLower === 'image' ? 'jpg' : mediaTypeLower === 'video' ? 'mp4' : 'mp3'}`,
+          };
+        } else if (mediaUrl) {
+          // Baixar mídia da URL usando MessageMedia.fromUrl
+          try {
+            const mediaFromUrl = await MessageMedia.fromUrl(mediaUrl);
+            mediaData = Buffer.from(mediaFromUrl.data, 'base64');
+            mediaOptions = {
+              mimetype: mediaFromUrl.mimetype || mediaMimeType || 'image/jpeg',
+              filename: mediaFromUrl.filename || mediaFilename || mediaUrl.split('/').pop() || `media.${mediaTypeLower === 'image' ? 'jpg' : mediaTypeLower === 'video' ? 'mp4' : 'mp3'}`,
+            };
+          } catch (urlError) {
+            console.error('Erro ao baixar mídia da URL:', urlError);
+            // Fallback: tentar com fetch (node-fetch já está disponível no zap)
+            try {
+              const fetch = require('node-fetch');
+              const response = await fetch(mediaUrl);
+              const arrayBuffer = await response.arrayBuffer();
+              mediaData = Buffer.from(arrayBuffer);
+              mediaOptions = {
+                mimetype: mediaMimeType || response.headers.get('content-type') || 'image/jpeg',
+                filename: mediaFilename || mediaUrl.split('/').pop() || `media.${mediaTypeLower === 'image' ? 'jpg' : mediaTypeLower === 'video' ? 'mp4' : 'mp3'}`,
+              };
+            } catch (fetchError) {
+              console.error('Erro ao baixar com fetch:', fetchError);
+              throw new Error('Não foi possível baixar a mídia da URL');
+            }
+          }
+        }
+
+        // Criar MessageMedia
+        const media = new MessageMedia(
+          mediaOptions.mimetype,
+          mediaData.toString('base64'),
+          mediaOptions.filename
+        );
+
+        // Enviar mídia com mensagem
+        if (mediaTypeLower === 'image') {
+          result = await client.sendMessage(chatId, media, { caption: message });
+        } else if (mediaTypeLower === 'video') {
+          result = await client.sendMessage(chatId, media, { caption: message });
+        } else if (mediaTypeLower === 'audio') {
+          // Áudio pode ser enviado como voice note ou como áudio normal
+          result = await client.sendMessage(chatId, media, { sendAudioAsVoice: false });
+          // Enviar mensagem separadamente se houver
+          if (message && message.trim()) {
+            await client.sendMessage(chatId, message);
+          }
+        } else {
+          // Tipo desconhecido, enviar como documento
+          result = await client.sendMessage(chatId, media, { caption: message });
+        }
+      } catch (mediaError) {
+        console.error('Erro ao processar mídia:', mediaError);
+        // Fallback: enviar apenas mensagem de texto
+        result = await client.sendMessage(chatId, message);
+      }
+    } else {
+      // Enviar apenas mensagem de texto
+      result = await client.sendMessage(chatId, message);
+    }
 
     res.json({
       success: true,
@@ -293,6 +370,27 @@ app.post('/api/whatsapp/send', async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
+// Função auxiliar para determinar MIME type do filename
+function getMimeTypeFromFilename(filename) {
+  if (!filename) return 'image/jpeg';
+  const ext = filename.split('.').pop()?.toLowerCase();
+  const mimeTypes = {
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'webp': 'image/webp',
+    'mp4': 'video/mp4',
+    'mpeg': 'video/mpeg',
+    'mov': 'video/quicktime',
+    'webm': 'video/webm',
+    'mp3': 'audio/mpeg',
+    'wav': 'audio/wav',
+    'ogg': 'audio/ogg',
+  };
+  return mimeTypes[ext] || 'image/jpeg';
+}
 
 // Root endpoint
 app.get('/', (req, res) => {

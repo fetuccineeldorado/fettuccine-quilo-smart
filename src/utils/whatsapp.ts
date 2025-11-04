@@ -10,7 +10,10 @@ export interface WhatsAppMessage {
   templateName?: string;
   templateParams?: string[];
   mediaUrl?: string;
-  mediaType?: 'image' | 'document';
+  mediaType?: 'image' | 'video' | 'audio' | 'document';
+  mediaFile?: File; // Arquivo para upload quando mediaUrl não está disponível
+  mediaMimeType?: string; // MIME type do arquivo
+  mediaFilename?: string; // Nome do arquivo
 }
 
 export interface WhatsAppConfig {
@@ -55,16 +58,33 @@ class WhatsAppService {
       const backendUrl = connection.api_url || 'http://localhost:3001';
       const formattedNumber = this.formatPhoneNumber(message.to);
 
+      // Preparar dados para envio
+      const requestBody: any = {
+        instanceId: connection.instance_id,
+        to: formattedNumber,
+        message: message.message,
+      };
+
+      // Se houver mídia, adicionar ao request
+      if (message.mediaUrl || message.mediaFile) {
+        requestBody.mediaUrl = message.mediaUrl;
+        requestBody.mediaType = message.mediaType || 'image';
+        requestBody.mediaMimeType = message.mediaMimeType;
+        requestBody.mediaFilename = message.mediaFilename;
+
+        // Se houver arquivo mas não URL, converter para base64
+        if (message.mediaFile && !message.mediaUrl) {
+          const base64 = await this.fileToBase64(message.mediaFile);
+          requestBody.mediaBase64 = base64;
+        }
+      }
+
       const response = await fetch(`${backendUrl}/api/whatsapp/send`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          instanceId: connection.instance_id,
-          to: formattedNumber,
-          message: message.message,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -325,6 +345,21 @@ class WhatsAppService {
     return await this.sendMessage({
       to: phone,
       message,
+    });
+  }
+
+  /**
+   * Converter arquivo para base64
+   */
+  private async fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = (reader.result as string).split(',')[1]; // Remove data:image/...;base64,
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
     });
   }
 

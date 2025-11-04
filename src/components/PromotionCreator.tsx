@@ -26,8 +26,12 @@ import {
   Eye,
   Search,
   Check,
-  X
+  X,
+  Image as ImageIcon,
+  Video,
+  Music
 } from "lucide-react";
+import MediaUpload, { MediaFile } from "@/components/MediaUpload";
 
 interface TargetCriteria {
   tiers?: string[];
@@ -64,6 +68,9 @@ const PromotionCreator = () => {
     pointsBonus: "",
     validUntil: "",
   });
+
+  // Mídia (imagem, vídeo ou áudio)
+  const [media, setMedia] = useState<MediaFile | null>(null);
 
   // Critérios de seleção
   const [criteria, setCriteria] = useState<TargetCriteria>({
@@ -232,6 +239,11 @@ const PromotionCreator = () => {
           discount_amount: promotionData.discountAmount ? parseFloat(promotionData.discountAmount) : null,
           points_bonus: promotionData.pointsBonus ? parseFloat(promotionData.pointsBonus) : null,
           valid_until: promotionData.validUntil || null,
+          media_url: media?.url || null,
+          media_type: media?.type || null,
+          media_filename: media?.file.name || null,
+          media_size: media?.file.size || null,
+          media_mime_type: media?.file.type || null,
           created_by: session.user.id,
         })
         .select()
@@ -278,6 +290,7 @@ const PromotionCreator = () => {
         hasWhatsApp: true,
         isActive: true,
       });
+      setMedia(null);
       setEstimatedRecipients(null);
 
     } catch (error: any) {
@@ -319,6 +332,11 @@ const PromotionCreator = () => {
           description: promotionData.description,
           message_content: promotionData.messageContent,
           promotion_type: promotionData.promotionType,
+          media_url: media?.url || null,
+          media_type: media?.type || null,
+          media_filename: media?.file.name || null,
+          media_size: media?.file.size || null,
+          media_mime_type: media?.file.type || null,
           created_by: session.user.id,
         })
         .select()
@@ -338,13 +356,14 @@ const PromotionCreator = () => {
         throw new Error(campaignResult.error || 'Erro ao criar campanha');
       }
 
-      // Enviar campanha
+      // Enviar campanha com mídia
       const sendResult = await bulkMessagingService.sendCampaign(
         campaignResult.campaignId,
         promotionData.messageContent,
         (progress) => {
           setProgress(progress);
-        }
+        },
+        media || undefined
       );
 
       if (sendResult.success) {
@@ -440,6 +459,19 @@ const PromotionCreator = () => {
             />
             <p className="text-xs text-muted-foreground">
               Use *texto* para negrito e _texto_ para itálico no WhatsApp
+            </p>
+          </div>
+
+          {/* Upload de Mídia */}
+          <div className="space-y-2">
+            <Label>Mídia (Imagem, Vídeo ou Áudio) - Opcional</Label>
+            <MediaUpload
+              onMediaChange={setMedia}
+              maxSizeMB={10}
+              acceptedTypes={['image', 'video', 'audio']}
+            />
+            <p className="text-xs text-muted-foreground">
+              Você pode enviar uma imagem, vídeo ou áudio junto com a mensagem. Formatos aceitos: JPG, PNG, MP4, MP3, WAV (máx. 10MB)
             </p>
           </div>
 
@@ -745,7 +777,26 @@ const PromotionCreator = () => {
             </DialogDescription>
           </DialogHeader>
           <div className="p-4 bg-green-50 rounded-lg border-2 border-green-200">
-            <div className="bg-white rounded-lg p-4 shadow-sm">
+            <div className="bg-white rounded-lg p-4 shadow-sm space-y-4">
+              {media && (
+                <div className="border rounded-lg overflow-hidden">
+                  {media.type === 'image' && media.preview && (
+                    <img src={media.preview} alt="Preview" className="w-full max-h-64 object-contain" />
+                  )}
+                  {media.type === 'video' && (
+                    <div className="p-8 bg-muted flex items-center justify-center">
+                      <Video className="h-12 w-12 text-muted-foreground" />
+                      <span className="ml-2">Vídeo: {media.file.name}</span>
+                    </div>
+                  )}
+                  {media.type === 'audio' && (
+                    <div className="p-8 bg-muted flex items-center justify-center">
+                      <Music className="h-12 w-12 text-muted-foreground" />
+                      <span className="ml-2">Áudio: {media.file.name}</span>
+                    </div>
+                  )}
+                </div>
+              )}
               <p className="whitespace-pre-wrap text-sm">
                 {promotionData.messageContent || "Nenhuma mensagem definida"}
               </p>
