@@ -89,7 +89,7 @@ const CustomerFormWithRewards = ({ customerId, onSuccess, onCancel }: CustomerFo
           .single();
         
         if (basicError) throw basicError;
-        data = basicData;
+        data = basicData as any;
       } else if (error) {
         throw error;
       }

@@ -317,6 +317,39 @@ export type Database = {
           },
         ]
       }
+      extra_items: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          price: number
+          updated_at: string | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          price: number
+          updated_at?: string | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          price?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       order_items: {
         Row: {
           created_at: string
@@ -469,6 +502,104 @@ export type Database = {
           },
         ]
       }
+      product_categories: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      products: {
+        Row: {
+          barcode: string | null
+          category_id: string | null
+          cost: number | null
+          created_at: string | null
+          description: string | null
+          id: string
+          image_url: string | null
+          is_active: boolean | null
+          max_stock_level: number | null
+          min_stock_level: number | null
+          name: string
+          price: number
+          sku: string | null
+          stock_quantity: number | null
+          tags: string[] | null
+          unit: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          barcode?: string | null
+          category_id?: string | null
+          cost?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean | null
+          max_stock_level?: number | null
+          min_stock_level?: number | null
+          name: string
+          price: number
+          sku?: string | null
+          stock_quantity?: number | null
+          tags?: string[] | null
+          unit?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          barcode?: string | null
+          category_id?: string | null
+          cost?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean | null
+          max_stock_level?: number | null
+          min_stock_level?: number | null
+          name?: string
+          price?: number
+          sku?: string | null
+          stock_quantity?: number | null
+          tags?: string[] | null
+          unit?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "product_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -617,6 +748,50 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stock_alerts: {
+        Row: {
+          alert_type: string
+          created_at: string | null
+          current_stock: number
+          id: string
+          is_resolved: boolean | null
+          message: string | null
+          product_id: string
+          resolved_at: string | null
+          threshold: number
+        }
+        Insert: {
+          alert_type: string
+          created_at?: string | null
+          current_stock: number
+          id?: string
+          is_resolved?: boolean | null
+          message?: string | null
+          product_id: string
+          resolved_at?: string | null
+          threshold: number
+        }
+        Update: {
+          alert_type?: string
+          created_at?: string | null
+          current_stock?: number
+          id?: string
+          is_resolved?: boolean | null
+          message?: string | null
+          product_id?: string
+          resolved_at?: string | null
+          threshold?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_alerts_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
             referencedColumns: ["id"]
           },
         ]

@@ -103,7 +103,7 @@ const PromotionCreator = () => {
           throw basicQuery.error;
         }
         
-        data = basicQuery.data;
+        data = basicQuery.data as any;
         error = basicQuery.error;
       } else if (error) {
         console.error('Erro detalhado ao carregar clientes:', error);
