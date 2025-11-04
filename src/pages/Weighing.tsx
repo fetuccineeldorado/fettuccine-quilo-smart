@@ -302,7 +302,9 @@ const Weighing = () => {
         }
         
         // Tratar erros específicos
-        if (insertExtraError.code === "23503" || insertExtraError.message?.includes("foreign key")) {
+        if (insertExtraError.code === "PGRST205" || insertExtraError.message?.includes("Could not find the table") || insertExtraError.message?.includes("order_extra_items")) {
+          errorMessage = "A tabela 'order_extra_items' não existe no banco de dados. Por favor, execute a migration SQL no Supabase Dashboard. Veja o arquivo 'criar_order_extra_items_table.sql' ou 'APLICAR_TABELA_ORDER_EXTRA_ITEMS.md' para instruções.";
+        } else if (insertExtraError.code === "23503" || insertExtraError.message?.includes("foreign key")) {
           errorMessage = "Um ou mais itens extras não foram encontrados no banco de dados. Por favor, recarregue a página e tente novamente.";
         } else if (insertExtraError.code === "23502" || insertExtraError.message?.includes("null value")) {
           errorMessage = "Dados inválidos ao inserir itens extras. Verifique se todos os campos estão preenchidos corretamente.";

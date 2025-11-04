@@ -37,44 +37,79 @@ const Dashboard = () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
+      // Verificar sessão antes de buscar dados
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        console.error('Erro de autenticação ao carregar estatísticas:', sessionError);
+        // Manter valores padrão se não houver sessão
+        return;
+      }
+
       // Fetch today's orders
       const { data: orders, error: ordersError } = await supabase
         .from("orders")
-        .select("*")
+        .select("id, status, total_amount, total_weight")
         .gte("opened_at", today.toISOString());
 
       if (ordersError) {
         console.error('Erro ao carregar pedidos do dia:', ordersError);
+        // Não mostrar toast para não poluir a interface, apenas logar
         return;
       }
 
       // Fetch open orders
       const { data: openOrders, error: openOrdersError } = await supabase
         .from("orders")
-        .select("*")
+        .select("id")
         .eq("status", "open");
 
       if (openOrdersError) {
         console.error('Erro ao carregar pedidos abertos:', openOrdersError);
+        // Não mostrar toast para não poluir a interface, apenas logar
         return;
       }
 
-      if (orders) {
-        const closedOrders = orders.filter(o => o.status === "closed");
-        const totalRevenue = closedOrders.reduce((sum, o) => sum + Number(o.total_amount), 0);
-        const totalWeight = closedOrders.reduce((sum, o) => sum + Number(o.total_weight), 0);
+      // Processar estatísticas com validação
+      if (orders && Array.isArray(orders)) {
+        const closedOrders = orders.filter(o => o && o.status === "closed");
+        const totalRevenue = closedOrders.reduce((sum, o) => {
+          const amount = Number(o.total_amount) || 0;
+          return sum + (isNaN(amount) ? 0 : amount);
+        }, 0);
+        const totalWeight = closedOrders.reduce((sum, o) => {
+          const weight = Number(o.total_weight) || 0;
+          return sum + (isNaN(weight) ? 0 : weight);
+        }, 0);
         const avgTicket = closedOrders.length > 0 ? totalRevenue / closedOrders.length : 0;
 
         setStats({
           todayOrders: closedOrders.length,
           todayRevenue: totalRevenue,
-          openOrders: openOrders?.length || 0,
-          avgTicket: avgTicket,
-          totalWeight: totalWeight,
+          openOrders: (openOrders && Array.isArray(openOrders)) ? openOrders.length : 0,
+          avgTicket: isNaN(avgTicket) ? 0 : avgTicket,
+          totalWeight: isNaN(totalWeight) ? 0 : totalWeight,
+        });
+      } else {
+        // Se não houver dados, manter valores padrão
+        setStats({
+          todayOrders: 0,
+          todayRevenue: 0,
+          openOrders: 0,
+          avgTicket: 0,
+          totalWeight: 0,
         });
       }
     } catch (err) {
       console.error('Erro geral ao carregar estatísticas:', err);
+      // Manter valores padrão em caso de erro
+      setStats({
+        todayOrders: 0,
+        todayRevenue: 0,
+        openOrders: 0,
+        avgTicket: 0,
+        totalWeight: 0,
+      });
     }
   }, []);
 

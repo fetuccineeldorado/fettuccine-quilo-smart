@@ -29,7 +29,8 @@ const Settings = () => {
       const { data, error } = await supabase
         .from("system_settings")
         .select("*")
-        .single();
+        .limit(1)
+        .maybeSingle();
 
       if (error) {
         console.error('Erro ao carregar configurações:', error);
@@ -41,18 +42,53 @@ const Settings = () => {
         return;
       }
 
-      if (data) {
-        setSettings({
-          pricePerKg: Number(data.price_per_kg).toFixed(2),
-          minimumCharge: Number(data.minimum_charge).toFixed(2),
-          maximumWeight: Number(data.maximum_weight).toFixed(2),
-        });
+      // Se não houver configurações, criar com valores padrão
+      if (!data) {
+        const { data: { session } } = await supabase.auth.getSession();
+        const defaultSettings = {
+          price_per_kg: 59.90,
+          minimum_charge: 5.00,
+          maximum_weight: 2.00,
+          updated_by: session?.user?.id || null,
+        };
+
+        const { data: newSettings, error: createError } = await supabase
+          .from("system_settings")
+          .insert([defaultSettings])
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Erro ao criar configurações padrão:', createError);
+          toast({
+            title: "Erro ao inicializar configurações",
+            description: "Não foi possível criar configurações padrão. Tente novamente.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        if (newSettings) {
+          setSettings({
+            pricePerKg: Number(newSettings.price_per_kg).toFixed(2),
+            minimumCharge: Number(newSettings.minimum_charge).toFixed(2),
+            maximumWeight: Number(newSettings.maximum_weight).toFixed(2),
+          });
+        }
+        return;
       }
+
+      // Se houver configurações, usar os valores
+      setSettings({
+        pricePerKg: Number(data.price_per_kg || 59.90).toFixed(2),
+        minimumCharge: Number(data.minimum_charge || 5.00).toFixed(2),
+        maximumWeight: Number(data.maximum_weight || 2.00).toFixed(2),
+      });
     } catch (err) {
       console.error('Erro geral ao carregar configurações:', err);
       toast({
         title: "Erro ao carregar configurações",
-        description: "Erro desconhecido",
+        description: err instanceof Error ? err.message : "Erro desconhecido",
         variant: "destructive",
       });
     }
@@ -150,10 +186,38 @@ const Settings = () => {
       const { data: currentSettings, error: fetchError } = await supabase
         .from("system_settings")
         .select("id")
-        .single();
+        .limit(1)
+        .maybeSingle();
 
       if (fetchError) {
         throw fetchError;
+      }
+
+      // Se não houver configurações, criar uma nova
+      if (!currentSettings) {
+        const { data: newSettings, error: createError } = await supabase
+          .from("system_settings")
+          .insert([{
+            price_per_kg: pricePerKgNum,
+            minimum_charge: minimumChargeNum,
+            maximum_weight: maximumWeightNum,
+            updated_by: session.user.id,
+          }])
+          .select()
+          .single();
+
+        if (createError) {
+          throw createError;
+        }
+
+        toast({
+          title: "Configurações salvas!",
+          description: "As alterações foram aplicadas com sucesso",
+        });
+
+        clearSettingsCache();
+        await fetchSettings();
+        return;
       }
 
       // Atualizar as configurações
