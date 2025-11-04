@@ -119,32 +119,32 @@ const Dashboard = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-8 space-y-8">
+      <div className="p-4 lg:p-8 space-y-4 lg:space-y-8">
         {/* Header */}
         <div>
-          <h1 className="text-4xl font-bold mb-2">Dashboard</h1>
-          <p className="text-muted-foreground text-lg">
+          <h1 className="text-2xl lg:text-4xl font-bold mb-2">Dashboard</h1>
+          <p className="text-muted-foreground text-sm lg:text-lg">
             Visão geral do sistema FETUCCINE
           </p>
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
           {statCards.map((stat) => {
             const Icon = stat.icon;
             return (
               <Card key={stat.title} className="shadow-soft hover:shadow-lg transition-smooth">
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                <CardHeader className="flex flex-row items-center justify-between pb-2 px-4 lg:px-6">
+                  <CardTitle className="text-xs lg:text-sm font-medium text-muted-foreground">
                     {stat.title}
                   </CardTitle>
-                  <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                    <Icon className={`h-5 w-5 ${stat.color}`} />
+                  <div className={`p-1.5 lg:p-2 rounded-lg ${stat.bgColor}`}>
+                    <Icon className={`h-4 w-4 lg:h-5 lg:w-5 ${stat.color}`} />
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold mb-1">{stat.value}</div>
-                  <p className="text-sm text-muted-foreground">{stat.description}</p>
+                <CardContent className="px-4 lg:px-6">
+                  <div className="text-2xl lg:text-3xl font-bold mb-1">{stat.value}</div>
+                  <p className="text-xs lg:text-sm text-muted-foreground">{stat.description}</p>
                 </CardContent>
               </Card>
             );
@@ -154,13 +154,13 @@ const Dashboard = () => {
         {/* Stock Alerts */}
         {alerts.length > 0 && (
           <Card className="shadow-soft border-l-4 border-l-yellow-500">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-yellow-500" />
-                  Alertas de Estoque
+            <CardHeader className="px-4 lg:px-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <CardTitle className="flex items-center gap-2 text-base lg:text-lg">
+                  <AlertTriangle className="h-4 w-4 lg:h-5 lg:w-5 text-yellow-500" />
+                  <span className="truncate">Alertas de Estoque</span>
                   {hasNewAlerts && (
-                    <Badge variant="destructive" className="animate-pulse">
+                    <Badge variant="destructive" className="animate-pulse text-xs">
                       Novo
                     </Badge>
                   )}
@@ -170,30 +170,32 @@ const Dashboard = () => {
                   size="sm"
                   onClick={resolveAllAlerts}
                   disabled={alertsLoading}
+                  className="w-full sm:w-auto"
                 >
                   <CheckCircle className="h-4 w-4 mr-2" />
-                  Resolver Todos
+                  <span className="hidden sm:inline">Resolver Todos</span>
+                  <span className="sm:hidden">Resolver</span>
                 </Button>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 lg:px-6">
               <div className="space-y-2">
                 {alerts.slice(0, 3).map((alert) => (
-                  <div key={alert.id} className="flex items-center justify-between p-2 bg-yellow-50 rounded-lg">
+                  <div key={alert.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-2 lg:p-3 bg-yellow-50 dark:bg-yellow-950/20 rounded-lg">
                     <div className="flex items-center gap-2">
-                      <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                      <span className="font-medium">{alert.name}</span>
-                      <Badge variant="outline" className="text-xs">
+                      <AlertTriangle className="h-4 w-4 text-yellow-600 flex-shrink-0" />
+                      <span className="font-medium text-sm lg:text-base truncate">{alert.name}</span>
+                      <Badge variant="outline" className="text-xs flex-shrink-0">
                         {alert.current_stock <= 0 ? 'Sem estoque' : 'Estoque baixo'}
                       </Badge>
                     </div>
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-xs lg:text-sm text-muted-foreground">
                       {alert.current_stock} {alert.unit} (mín: {alert.min_stock})
                     </span>
                   </div>
                 ))}
                 {alerts.length > 3 && (
-                  <p className="text-sm text-muted-foreground text-center">
+                  <p className="text-xs lg:text-sm text-muted-foreground text-center">
                     +{alerts.length - 3} alertas adicionais
                   </p>
                 )}
@@ -204,76 +206,76 @@ const Dashboard = () => {
 
         {/* Quick Actions */}
         <Card className="shadow-soft">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5" />
+          <CardHeader className="px-4 lg:px-6">
+            <CardTitle className="flex items-center gap-2 text-base lg:text-lg">
+              <Clock className="h-4 w-4 lg:h-5 lg:w-5" />
               Ações Rápidas
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4 px-4 lg:px-6">
             <a
               href="/dashboard/weighing"
-              className="p-6 rounded-lg border-2 border-border hover:border-primary bg-card hover:bg-accent transition-smooth text-center"
+              className="p-4 lg:p-6 rounded-lg border-2 border-border hover:border-primary bg-card hover:bg-accent transition-smooth text-center"
             >
-              <Scale className="h-8 w-8 mx-auto mb-3 text-primary" />
-              <h3 className="font-semibold mb-1">Nova Pesagem</h3>
-              <p className="text-sm text-muted-foreground">Iniciar nova comanda</p>
+              <Scale className="h-6 w-6 lg:h-8 lg:w-8 mx-auto mb-2 lg:mb-3 text-primary" />
+              <h3 className="font-semibold mb-1 text-sm lg:text-base">Nova Pesagem</h3>
+              <p className="text-xs lg:text-sm text-muted-foreground">Iniciar nova comanda</p>
             </a>
             
             <a
               href="/dashboard/cashier"
-              className="p-6 rounded-lg border-2 border-border hover:border-success bg-card hover:bg-accent transition-smooth text-center"
+              className="p-4 lg:p-6 rounded-lg border-2 border-border hover:border-success bg-card hover:bg-accent transition-smooth text-center"
             >
-              <DollarSign className="h-8 w-8 mx-auto mb-3 text-success" />
-              <h3 className="font-semibold mb-1">Fechar Comanda</h3>
-              <p className="text-sm text-muted-foreground">Processar pagamento</p>
+              <DollarSign className="h-6 w-6 lg:h-8 lg:w-8 mx-auto mb-2 lg:mb-3 text-success" />
+              <h3 className="font-semibold mb-1 text-sm lg:text-base">Fechar Comanda</h3>
+              <p className="text-xs lg:text-sm text-muted-foreground">Processar pagamento</p>
             </a>
             
             <a
               href="/dashboard/reports"
-              className="p-6 rounded-lg border-2 border-border hover:border-secondary bg-card hover:bg-accent transition-smooth text-center"
+              className="p-4 lg:p-6 rounded-lg border-2 border-border hover:border-secondary bg-card hover:bg-accent transition-smooth text-center sm:col-span-2 lg:col-span-1"
             >
-              <BarChart3 className="h-8 w-8 mx-auto mb-3 text-secondary" />
-              <h3 className="font-semibold mb-1">Relatórios</h3>
-              <p className="text-sm text-muted-foreground">Ver relatórios</p>
+              <BarChart3 className="h-6 w-6 lg:h-8 lg:w-8 mx-auto mb-2 lg:mb-3 text-secondary" />
+              <h3 className="font-semibold mb-1 text-sm lg:text-base">Relatórios</h3>
+              <p className="text-xs lg:text-sm text-muted-foreground">Ver relatórios</p>
             </a>
           </CardContent>
         </Card>
 
         {/* Management Sections */}
         <Card className="shadow-soft">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
+          <CardHeader className="px-4 lg:px-6">
+            <CardTitle className="flex items-center gap-2 text-base lg:text-lg">
+              <Users className="h-4 w-4 lg:h-5 lg:w-5" />
               Gestão
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4 px-4 lg:px-6">
             <a
               href="/dashboard/inventory"
-              className="p-6 rounded-lg border-2 border-border hover:border-primary bg-card hover:bg-accent transition-smooth text-center"
+              className="p-4 lg:p-6 rounded-lg border-2 border-border hover:border-primary bg-card hover:bg-accent transition-smooth text-center"
             >
-              <Package className="h-8 w-8 mx-auto mb-3 text-primary" />
-              <h3 className="font-semibold mb-1">Estoque</h3>
-              <p className="text-sm text-muted-foreground">Gerenciar inventário</p>
+              <Package className="h-6 w-6 lg:h-8 lg:w-8 mx-auto mb-2 lg:mb-3 text-primary" />
+              <h3 className="font-semibold mb-1 text-sm lg:text-base">Estoque</h3>
+              <p className="text-xs lg:text-sm text-muted-foreground">Gerenciar inventário</p>
             </a>
             
             <a
               href="/dashboard/customers"
-              className="p-6 rounded-lg border-2 border-border hover:border-success bg-card hover:bg-accent transition-smooth text-center"
+              className="p-4 lg:p-6 rounded-lg border-2 border-border hover:border-success bg-card hover:bg-accent transition-smooth text-center"
             >
-              <Users className="h-8 w-8 mx-auto mb-3 text-success" />
-              <h3 className="font-semibold mb-1">Clientes</h3>
-              <p className="text-sm text-muted-foreground">Gerenciar clientes</p>
+              <Users className="h-6 w-6 lg:h-8 lg:w-8 mx-auto mb-2 lg:mb-3 text-success" />
+              <h3 className="font-semibold mb-1 text-sm lg:text-base">Clientes</h3>
+              <p className="text-xs lg:text-sm text-muted-foreground">Gerenciar clientes</p>
             </a>
             
             <a
               href="/dashboard/employees"
-              className="p-6 rounded-lg border-2 border-border hover:border-secondary bg-card hover:bg-accent transition-smooth text-center"
+              className="p-4 lg:p-6 rounded-lg border-2 border-border hover:border-secondary bg-card hover:bg-accent transition-smooth text-center sm:col-span-2 lg:col-span-1"
             >
-              <UserPlus className="h-8 w-8 mx-auto mb-3 text-secondary" />
-              <h3 className="font-semibold mb-1">Funcionários</h3>
-              <p className="text-sm text-muted-foreground">Gerenciar equipe</p>
+              <UserPlus className="h-6 w-6 lg:h-8 lg:w-8 mx-auto mb-2 lg:mb-3 text-secondary" />
+              <h3 className="font-semibold mb-1 text-sm lg:text-base">Funcionários</h3>
+              <p className="text-xs lg:text-sm text-muted-foreground">Gerenciar equipe</p>
             </a>
           </CardContent>
         </Card>

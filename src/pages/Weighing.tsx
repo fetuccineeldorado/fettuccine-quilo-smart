@@ -660,15 +660,15 @@ const Weighing = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-6 lg:space-y-8">
-        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
+      <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-4 lg:space-y-6">
+        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-3 lg:gap-4">
           <div>
-            <h1 className="text-2xl lg:text-4xl font-bold mb-2">Pesagem</h1>
-            <p className="text-muted-foreground text-base lg:text-lg">
+            <h1 className="text-2xl lg:text-4xl font-bold mb-1 lg:mb-2">Pesagem</h1>
+            <p className="text-muted-foreground text-sm lg:text-lg">
               Sistema de pesagem manual por quilo
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 lg:gap-2">
             <Button
               onClick={async () => {
                 try {
@@ -695,10 +695,11 @@ const Weighing = () => {
               }}
               variant="outline"
               size="sm"
-              className="flex items-center gap-2"
+              className="flex items-center gap-2 text-xs lg:text-sm"
             >
-              <Printer className="h-4 w-4" />
-              Detectar USB
+              <Printer className="h-3 w-3 lg:h-4 lg:w-4" />
+              <span className="hidden sm:inline">Detectar USB</span>
+              <span className="sm:hidden">USB</span>
             </Button>
             <Button
               onClick={async () => {
@@ -978,19 +979,19 @@ ${ThermalPrinter.FEED}${ThermalPrinter.FEED}${ThermalPrinter.CUT}
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
           {/* Manual Weighing Card */}
           <Card className="shadow-strong">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Utensils className="h-6 w-6 text-primary" />
+            <CardHeader className="px-4 lg:px-6 py-3 lg:py-6">
+              <CardTitle className="flex items-center gap-2 text-base lg:text-lg">
+                <Utensils className="h-5 w-5 lg:h-6 lg:w-6 text-primary" />
                 Pesagem Manual
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs lg:text-sm">
                 Insira o peso da comida manualmente
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-4 lg:space-y-6 px-4 lg:px-6">
               <div className="space-y-2">
                 <Label htmlFor="manual-weight">Peso (kg) *</Label>
                 <Input
@@ -1022,7 +1023,7 @@ ${ThermalPrinter.FEED}${ThermalPrinter.FEED}${ThermalPrinter.CUT}
           </Card>
 
           {/* Extra Items Card */}
-          <Card className="shadow-strong">
+          <Card className="shadow-strong lg:col-span-1">
             <CardHeader>
               <CardTitle>Itens Extra</CardTitle>
               <CardDescription>
@@ -1131,7 +1132,7 @@ ${ThermalPrinter.FEED}${ThermalPrinter.FEED}${ThermalPrinter.CUT}
                   printing
                 }
                 size="lg"
-                className="w-full"
+                className="w-full text-sm lg:text-base"
               >
                 {loading 
                   ? (

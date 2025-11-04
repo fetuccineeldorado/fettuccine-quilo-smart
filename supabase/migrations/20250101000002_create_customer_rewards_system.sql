@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS customer_referrals (
 CREATE TABLE IF NOT EXISTS reward_rules (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   rule_type VARCHAR(50) NOT NULL CHECK (rule_type IN ('points_per_real', 'points_per_order', 'referral_bonus', 'tier_bonus')),
-  tier VARCHAR(20) REFERENCES customers(tier),
+  tier VARCHAR(20) CHECK (tier IN ('bronze', 'silver', 'gold', 'platinum') OR tier IS NULL),
   points_per_unit DECIMAL(10,2) NOT NULL,
   min_amount DECIMAL(10,2) DEFAULT 0,
   max_points_per_transaction DECIMAL(10,2),
@@ -181,12 +181,33 @@ CREATE TRIGGER trigger_update_customer_tier
   WHEN (OLD.total_spent IS DISTINCT FROM NEW.total_spent)
   EXECUTE FUNCTION update_customer_tier();
 
--- 13. Inserir regras de bonificação padrão
-INSERT INTO reward_rules (rule_type, points_per_unit, is_active, valid_from) VALUES
-  ('points_per_real', 1.0, true, NOW()), -- 1 ponto por R$ 1,00 gasto
-  ('referral_bonus', 100.0, true, NOW()), -- 100 pontos por indicação completada
-  ('tier_bonus', 0.0, true, NOW()) -- Bônus por tier (configurável)
-ON CONFLICT DO NOTHING;
+-- 13. Inserir regras de bonificação padrão (apenas se não existirem)
+INSERT INTO reward_rules (id, rule_type, points_per_unit, is_active, valid_from) 
+SELECT 
+  gen_random_uuid(),
+  'points_per_real',
+  1.0,
+  true,
+  NOW()
+WHERE NOT EXISTS (SELECT 1 FROM reward_rules WHERE rule_type = 'points_per_real');
+
+INSERT INTO reward_rules (id, rule_type, points_per_unit, is_active, valid_from) 
+SELECT 
+  gen_random_uuid(),
+  'referral_bonus',
+  100.0,
+  true,
+  NOW()
+WHERE NOT EXISTS (SELECT 1 FROM reward_rules WHERE rule_type = 'referral_bonus');
+
+INSERT INTO reward_rules (id, rule_type, points_per_unit, is_active, valid_from) 
+SELECT 
+  gen_random_uuid(),
+  'tier_bonus',
+  0.0,
+  true,
+  NOW()
+WHERE NOT EXISTS (SELECT 1 FROM reward_rules WHERE rule_type = 'tier_bonus');
 
 -- 14. Atualizar customers existentes com código de indicação
 UPDATE customers 
@@ -200,37 +221,44 @@ ALTER TABLE reward_rules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE customer_redemptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE customer_whatsapp_messages ENABLE ROW LEVEL SECURITY;
 
--- 16. Políticas RLS para as novas tabelas
+-- 16. Políticas RLS para as novas tabelas (idempotentes)
+DROP POLICY IF EXISTS "Authenticated users can view points transactions" ON customer_points_transactions;
 CREATE POLICY "Authenticated users can view points transactions"
   ON customer_points_transactions FOR SELECT
   TO authenticated
   USING (true);
 
+DROP POLICY IF EXISTS "Authenticated users can create points transactions" ON customer_points_transactions;
 CREATE POLICY "Authenticated users can create points transactions"
   ON customer_points_transactions FOR INSERT
   TO authenticated
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Authenticated users can view referrals" ON customer_referrals;
 CREATE POLICY "Authenticated users can view referrals"
   ON customer_referrals FOR SELECT
   TO authenticated
   USING (true);
 
+DROP POLICY IF EXISTS "Authenticated users can create referrals" ON customer_referrals;
 CREATE POLICY "Authenticated users can create referrals"
   ON customer_referrals FOR INSERT
   TO authenticated
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Authenticated users can update referrals" ON customer_referrals;
 CREATE POLICY "Authenticated users can update referrals"
   ON customer_referrals FOR UPDATE
   TO authenticated
   USING (true);
 
+DROP POLICY IF EXISTS "Authenticated users can view reward rules" ON reward_rules;
 CREATE POLICY "Authenticated users can view reward rules"
   ON reward_rules FOR SELECT
   TO authenticated
   USING (true);
 
+DROP POLICY IF EXISTS "Managers and admins can manage reward rules" ON reward_rules;
 CREATE POLICY "Managers and admins can manage reward rules"
   ON reward_rules FOR ALL
   TO authenticated
@@ -243,31 +271,37 @@ CREATE POLICY "Managers and admins can manage reward rules"
     )
   );
 
+DROP POLICY IF EXISTS "Authenticated users can view redemptions" ON customer_redemptions;
 CREATE POLICY "Authenticated users can view redemptions"
   ON customer_redemptions FOR SELECT
   TO authenticated
   USING (true);
 
+DROP POLICY IF EXISTS "Authenticated users can create redemptions" ON customer_redemptions;
 CREATE POLICY "Authenticated users can create redemptions"
   ON customer_redemptions FOR INSERT
   TO authenticated
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Authenticated users can update redemptions" ON customer_redemptions;
 CREATE POLICY "Authenticated users can update redemptions"
   ON customer_redemptions FOR UPDATE
   TO authenticated
   USING (true);
 
+DROP POLICY IF EXISTS "Authenticated users can view whatsapp messages" ON customer_whatsapp_messages;
 CREATE POLICY "Authenticated users can view whatsapp messages"
   ON customer_whatsapp_messages FOR SELECT
   TO authenticated
   USING (true);
 
+DROP POLICY IF EXISTS "Authenticated users can create whatsapp messages" ON customer_whatsapp_messages;
 CREATE POLICY "Authenticated users can create whatsapp messages"
   ON customer_whatsapp_messages FOR INSERT
   TO authenticated
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Authenticated users can update whatsapp messages" ON customer_whatsapp_messages;
 CREATE POLICY "Authenticated users can update whatsapp messages"
   ON customer_whatsapp_messages FOR UPDATE
   TO authenticated

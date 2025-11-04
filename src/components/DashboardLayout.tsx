@@ -22,6 +22,10 @@ import {
 } from "lucide-react";
 import { Session } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
+import MobileBottomNav from "@/components/MobileBottomNav";
+import MobileMenuSheet from "@/components/MobileMenuSheet";
+import FloatingActionButton from "@/components/FloatingActionButton";
+import { useSwipeGesture } from "@/hooks/useSwipeGesture";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -32,7 +36,55 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const location = useLocation();
   const { toast } = useToast();
   const [session, setSession] = useState<Session | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false); // Mobile-first: closed by default
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [openOrdersCount, setOpenOrdersCount] = useState(0);
+
+  // Swipe gesture para abrir menu
+  const swipeGestures = useSwipeGesture({
+    onSwipeRight: () => {
+      if (window.innerWidth < 1024 && !mobileMenuOpen) {
+        setMobileMenuOpen(true);
+      }
+    },
+    onSwipeLeft: () => {
+      if (window.innerWidth < 1024 && mobileMenuOpen) {
+        setMobileMenuOpen(false);
+      }
+    },
+    threshold: 75,
+    velocityThreshold: 0.4
+  });
+
+  // Fetch open orders count for badge
+  useEffect(() => {
+    const fetchOpenOrders = async () => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("id", { count: 'exact', head: true })
+        .eq("status", "open");
+      
+      if (!error && data) {
+        setOpenOrdersCount(data.length || 0);
+      }
+    };
+
+    fetchOpenOrders();
+
+    // Subscribe to order changes
+    const subscription = supabase
+      .channel('orders_count')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'orders'
+      }, fetchOpenOrders)
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -84,7 +136,25 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div 
+      className="min-h-screen bg-background flex flex-col lg:flex-row"
+      {...swipeGestures}
+    >
+      {/* Mobile Header */}
+      <header className="lg:hidden sticky top-0 z-30 bg-card border-b border-border px-4 py-3 flex items-center justify-between shadow-sm">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setSidebarOpen(true)}
+        >
+          <Menu className="h-6 w-6" />
+        </Button>
+        <h1 className="text-lg font-bold gradient-primary bg-clip-text text-transparent">
+          FETUCCINE
+        </h1>
+        <ThemeToggle />
+      </header>
+
       {/* Mobile Overlay */}
       {sidebarOpen && (
         <div 
@@ -96,41 +166,37 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       {/* Sidebar */}
       <aside
         className={`${
-          sidebarOpen ? "w-64" : "w-20"
-        } transition-all duration-300 bg-card border-r border-border flex flex-col shadow-soft fixed lg:relative z-50 h-screen lg:h-auto`}
+          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        } ${
+          sidebarOpen ? "w-64" : "lg:w-20"
+        } transition-all duration-300 bg-card border-r border-border flex flex-col shadow-soft fixed lg:sticky lg:top-0 z-50 h-full lg:h-screen`}
       >
-        {/* Header */}
+        {/* Sidebar Header */}
         <div className="p-4 lg:p-6 border-b border-border flex items-center justify-between">
-          {sidebarOpen ? (
-            <>
-              <h1 className="text-xl lg:text-2xl font-bold gradient-primary bg-clip-text text-transparent">
-                FETUCCINE
-              </h1>
-              <div className="flex items-center gap-2">
-                <ThemeToggle />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSidebarOpen(false)}
-                  className="lg:hidden"
-                >
-                  <X className="h-5 w-5" />
-                </Button>
-              </div>
-            </>
-          ) : (
-            <div className="flex flex-col items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setSidebarOpen(true)}
-                className="mx-auto"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
+          <h1 className={`text-xl lg:text-2xl font-bold gradient-primary bg-clip-text text-transparent ${!sidebarOpen && 'lg:hidden'}`}>
+            FETUCCINE
+          </h1>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden"
+            >
+              <X className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="hidden lg:flex"
+            >
+              {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </Button>
+            <div className={sidebarOpen ? '' : 'hidden lg:block'}>
               <ThemeToggle />
             </div>
-          )}
+          </div>
         </div>
 
         {/* Navigation */}
@@ -176,9 +242,27 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto lg:ml-0">
-        {children}
+      <main className="flex-1 overflow-auto w-full pb-20 lg:pb-0">
+        <div className="h-full">
+          {children}
+        </div>
       </main>
+
+      {/* Mobile Bottom Navigation */}
+      <MobileBottomNav 
+        onMenuOpen={() => setMobileMenuOpen(true)}
+        notificationCount={openOrdersCount}
+      />
+
+      {/* Mobile Full Menu Sheet */}
+      <MobileMenuSheet
+        open={mobileMenuOpen}
+        onOpenChange={setMobileMenuOpen}
+        onLogout={handleLogout}
+      />
+
+      {/* Floating Action Button */}
+      <FloatingActionButton />
     </div>
   );
 };

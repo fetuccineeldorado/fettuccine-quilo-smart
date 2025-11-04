@@ -156,47 +156,56 @@ ALTER TABLE promotions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE promotion_campaigns ENABLE ROW LEVEL SECURITY;
 ALTER TABLE campaign_recipients ENABLE ROW LEVEL SECURITY;
 
--- 10. Políticas RLS
+-- 10. Políticas RLS (idempotentes)
+DROP POLICY IF EXISTS "Authenticated users can view promotions" ON promotions;
 CREATE POLICY "Authenticated users can view promotions"
   ON promotions FOR SELECT
   TO authenticated
   USING (true);
 
+DROP POLICY IF EXISTS "Authenticated users can create promotions" ON promotions;
 CREATE POLICY "Authenticated users can create promotions"
   ON promotions FOR INSERT
   TO authenticated
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Authenticated users can update promotions" ON promotions;
 CREATE POLICY "Authenticated users can update promotions"
   ON promotions FOR UPDATE
   TO authenticated
   USING (true);
 
+DROP POLICY IF EXISTS "Authenticated users can view campaigns" ON promotion_campaigns;
 CREATE POLICY "Authenticated users can view campaigns"
   ON promotion_campaigns FOR SELECT
   TO authenticated
   USING (true);
 
+DROP POLICY IF EXISTS "Authenticated users can create campaigns" ON promotion_campaigns;
 CREATE POLICY "Authenticated users can create campaigns"
   ON promotion_campaigns FOR INSERT
   TO authenticated
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Authenticated users can update campaigns" ON promotion_campaigns;
 CREATE POLICY "Authenticated users can update campaigns"
   ON promotion_campaigns FOR UPDATE
   TO authenticated
   USING (true);
 
+DROP POLICY IF EXISTS "Authenticated users can view recipients" ON campaign_recipients;
 CREATE POLICY "Authenticated users can view recipients"
   ON campaign_recipients FOR SELECT
   TO authenticated
   USING (true);
 
+DROP POLICY IF EXISTS "Authenticated users can create recipients" ON campaign_recipients;
 CREATE POLICY "Authenticated users can create recipients"
   ON campaign_recipients FOR INSERT
   TO authenticated
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Authenticated users can update recipients" ON campaign_recipients;
 CREATE POLICY "Authenticated users can update recipients"
   ON campaign_recipients FOR UPDATE
   TO authenticated

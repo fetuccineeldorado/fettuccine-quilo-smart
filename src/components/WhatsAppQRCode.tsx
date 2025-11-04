@@ -42,6 +42,7 @@ const WhatsAppQRCode = ({ onConnected }: WhatsAppQRCodeProps) => {
     apiKey: '',
   });
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const connectionRef = useRef<WhatsAppConnection | null>(null);
 
   console.log('🔍 WhatsAppQRCode renderizado:', { 
     connection: connection ? 'existe' : 'null',
@@ -64,6 +65,7 @@ const WhatsAppQRCode = ({ onConnected }: WhatsAppQRCodeProps) => {
       const connections = await whatsappConnectionService.getAllConnections();
       if (connections.length > 0) {
         const current = connections[0];
+        connectionRef.current = current;
         setConnection(current);
         setConfig({
           instanceId: current.instance_id,
@@ -75,7 +77,11 @@ const WhatsAppQRCode = ({ onConnected }: WhatsAppQRCodeProps) => {
 
         // Se está conectando, iniciar polling
         if (current.status === 'connecting') {
-          startPolling();
+          startPolling({
+            instanceId: current.instance_id,
+            apiUrl: current.api_url || '',
+            apiKey: current.api_key || ''
+          });
         }
         
         // Se tem QR Code armazenado, exibir
@@ -83,9 +89,16 @@ const WhatsAppQRCode = ({ onConnected }: WhatsAppQRCodeProps) => {
           const expiresAt = new Date(current.qr_code_expires_at);
           if (expiresAt > new Date()) {
             setQrCode(current.qr_code);
-            startPolling();
+            startPolling({
+              instanceId: current.instance_id,
+              apiUrl: current.api_url || '',
+              apiKey: current.api_key || ''
+            });
           }
         }
+      } else {
+        connectionRef.current = null;
+        setConnection(null);
       }
     } catch (error) {
       console.error('Erro ao carregar conexão:', error);
@@ -214,13 +227,27 @@ const WhatsAppQRCode = ({ onConnected }: WhatsAppQRCodeProps) => {
             result.qrCode
           );
           
-          setQrCode(result.qrCode);
+          const normalizedQr = result.qrCode.startsWith('data:') ? result.qrCode : `data:image/png;base64,${result.qrCode}`;
+          const temporaryConnection: WhatsAppConnection = {
+            ...connection,
+            status: 'connecting',
+            qr_code: normalizedQr,
+            qr_code_expires_at: new Date(Date.now() + 60_000).toISOString(),
+          };
+
+          connectionRef.current = temporaryConnection;
+          setConnection(temporaryConnection);
+          setQrCode(normalizedQr);
           
           // Recarregar conexão para pegar o novo status
           await loadConnection();
           
           // Iniciar polling para verificar status
-          startPolling();
+          startPolling({
+            instanceId: connection.instance_id,
+            apiUrl: connection.api_url!,
+            apiKey: connection.api_key || ''
+          });
 
           toast({
             title: "QR Code gerado com sucesso!",
@@ -251,7 +278,7 @@ const WhatsAppQRCode = ({ onConnected }: WhatsAppQRCodeProps) => {
     }
   };
 
-  const startPolling = () => {
+  const startPolling = (options?: { instanceId?: string; apiUrl?: string; apiKey?: string }) => {
     // Limpar polling anterior
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
@@ -259,12 +286,19 @@ const WhatsAppQRCode = ({ onConnected }: WhatsAppQRCodeProps) => {
 
     // Verificar status a cada 2 segundos
     pollingIntervalRef.current = setInterval(async () => {
-      if (!connection) return;
+      const currentConnection = connectionRef.current;
+      const instanceId = options?.instanceId ?? currentConnection?.instance_id;
+      const apiUrl = options?.apiUrl ?? currentConnection?.api_url ?? '';
+      const apiKey = options?.apiKey ?? currentConnection?.api_key ?? '';
+
+      if (!instanceId || !apiUrl) {
+        return;
+      }
 
       const result = await whatsappConnectionService.checkConnectionStatus(
-        connection.instance_id,
-        connection.api_url!,
-        connection.api_key!
+        instanceId,
+        apiUrl,
+        apiKey
       );
 
       if (result.success && result.status === 'connected') {
@@ -287,9 +321,18 @@ const WhatsAppQRCode = ({ onConnected }: WhatsAppQRCodeProps) => {
         if (onConnected) {
           onConnected();
         }
+      } else if (result.success && result.status === 'connecting') {
+        // Garantir que o QR Code permaneça visível enquanto estiver conectando
+        if (result.qrCode) {
+          setQrCode(result.qrCode.startsWith('data:') ? result.qrCode : `data:image/png;base64,${result.qrCode}`);
+        }
+        setConnecting(true);
       } else if (result.success && result.status === 'disconnected') {
-        // Se desconectou, limpar QR Code
-        setQrCode(null);
+        // Apenas limpar se não estivermos aguardando conexão
+        if (connectionRef.current?.status !== 'connecting') {
+          setConnecting(false);
+          setQrCode(null);
+        }
       }
     }, 2000);
   };

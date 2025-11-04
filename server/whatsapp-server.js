@@ -5,7 +5,9 @@
 
 const express = require('express');
 const cors = require('cors');
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const path = require('path');
+// Usar a versão local da pasta zap ao invés do npm package
+const { Client, LocalAuth } = require(path.join(__dirname, '../zap'));
 const qrcode = require('qrcode');
 const app = express();
 const PORT = process.env.PORT || 3001;
