@@ -431,21 +431,9 @@ const Weighing = () => {
           
           console.log('✅ Itens extras inseridos com sucesso');
 
-          // Reduce stock for extra items using localStorage
-          for (const item of selectedExtraItems) {
-            const product = ensureProductExists(item.name, item.price);
-            const success = reduceProductStock(
-              product.id, 
-              item.quantity, 
-              order.id, 
-              'order',
-              `Venda automática - Comanda #${order.order_number}`
-            );
-            
-            if (!success) {
-              console.warn(`Não foi possível reduzir estoque para ${item.name}`);
-            }
-          }
+          // Estoque será reduzido automaticamente pelo trigger do banco
+          // quando order_extra_items for inserido
+          console.log('✅ Estoque será reduzido automaticamente pelo sistema');
         }
 
         toast({
@@ -506,21 +494,9 @@ const Weighing = () => {
           
           console.log('✅ Itens extras inseridos com sucesso');
 
-          // Reduce stock for extra items using localStorage
-          for (const item of selectedExtraItems) {
-            const product = ensureProductExists(item.name, item.price);
-            const success = reduceProductStock(
-              product.id, 
-              item.quantity, 
-              order.id, 
-              'order',
-              `Venda automática - Comanda #${order.order_number}`
-            );
-            
-            if (!success) {
-              console.warn(`Não foi possível reduzir estoque para ${item.name}`);
-            }
-          }
+          // Estoque será reduzido automaticamente pelo trigger do banco
+          // quando order_extra_items for inserido
+          console.log('✅ Estoque será reduzido automaticamente pelo sistema');
         }
 
         toast({

@@ -126,8 +126,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     { path: "/dashboard/customers", icon: Users, label: "Clientes" },
     { path: "/dashboard/promotions", icon: Megaphone, label: "Promoções" },
     { path: "/dashboard/employees", icon: UserPlus, label: "Funcionários" },
-    // TODO: Criar página de gestão de itens extras
-    // { path: "/dashboard/extra-items", icon: ShoppingCart, label: "Itens Extras" },
+    { path: "/dashboard/extra-items", icon: ShoppingCart, label: "Itens Extras" },
     { path: "/dashboard/settings", icon: Settings, label: "Configurações" },
   ];
 
