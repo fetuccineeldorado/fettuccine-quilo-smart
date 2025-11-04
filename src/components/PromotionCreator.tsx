@@ -115,6 +115,8 @@ const PromotionCreator = () => {
       const mappedCustomers = (data || []).map((customer: any) => ({
         id: customer.id,
         name: customer.name,
+        phone: customer.phone || '',
+        email: customer.email || '',
         whatsapp_number: customer.whatsapp_number || customer.phone || null,
         is_active: customer.is_active !== undefined ? customer.is_active : true,
       }));

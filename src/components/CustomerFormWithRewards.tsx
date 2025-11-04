@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { Database } from "@/integrations/supabase/types";
 import { whatsappService, configureWhatsAppFromEnv } from "@/utils/whatsapp";
 import { referralService } from "@/utils/referrals";
 import { 
@@ -28,20 +29,7 @@ import {
   AlertCircle
 } from "lucide-react";
 
-interface CustomerFormData {
-  name: string;
-  email?: string;
-  phone?: string;
-  whatsapp_number?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  zip_code?: string;
-  birth_date?: string;
-  notes?: string;
-  referral_code?: string; // Código de quem indicou
-  is_active?: boolean;
-}
+type CustomerFormData = Database['public']['Tables']['customers']['Insert'];
 
 interface CustomerFormWithRewardsProps {
   customerId?: string; // Se fornecido, está editando
@@ -219,8 +207,8 @@ const CustomerFormWithRewards = ({ customerId, onSuccess, onCancel }: CustomerFo
           .select()
           .single();
 
-        // Se erro de coluna não encontrada ou erro 400, tentar sem os campos da migração
-        if (error && (error.message?.includes("Could not find the") || error.code === '400' || error.status === 400)) {
+        // Se erro de coluna não encontrada, tentar sem os campos da migração
+        if (error && (error.message?.includes("Could not find the") || error.code === '400')) {
           console.log('Tentando salvar apenas com campos básicos devido a erro:', error.message);
           // Apenas campos que existem na tabela original (sem migração)
           const basicData = {
@@ -267,8 +255,8 @@ const CustomerFormWithRewards = ({ customerId, onSuccess, onCancel }: CustomerFo
           .select()
           .single();
 
-        // Se erro de coluna não encontrada ou erro 400, tentar sem os campos da migração
-        if (error && (error.message?.includes("Could not find the") || error.code === '400' || error.status === 400)) {
+        // Se erro de coluna não encontrada, tentar sem os campos da migração
+        if (error && (error.message?.includes("Could not find the") || error.code === '400')) {
           console.log('Tentando salvar apenas com campos básicos devido a erro:', error.message);
           // Apenas campos que existem na tabela original (sem migração)
           const basicData = {
@@ -332,16 +320,7 @@ const CustomerFormWithRewards = ({ customerId, onSuccess, onCancel }: CustomerFo
             );
 
             if (whatsappResult.success) {
-              // Registrar mensagem no banco
-              await supabase
-                .from('customer_whatsapp_messages')
-                .insert({
-                  customer_id: savedCustomerId,
-                  message_type: 'welcome',
-                  message_content: `Mensagem de boas-vindas enviada com código ${referralCode}`,
-                  status: 'sent',
-                  sent_at: new Date().toISOString(),
-                });
+              console.log('Mensagem WhatsApp enviada com sucesso');
             } else {
               console.warn('Erro ao enviar WhatsApp:', whatsappResult.error);
             }

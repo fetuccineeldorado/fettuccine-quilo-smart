@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { Database } from "@/integrations/supabase/types";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -7,15 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Search, User, Phone, Mail, Star, X } from "lucide-react";
 
-interface Customer {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  tier: 'bronze' | 'silver' | 'gold' | 'platinum';
-  total_orders: number;
-  total_spent: number;
-}
+type Customer = Database['public']['Tables']['customers']['Row'];
 
 interface CustomerSearchProps {
   onCustomerSelect: (customer: Customer | null) => void;

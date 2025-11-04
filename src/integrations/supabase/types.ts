@@ -14,38 +14,59 @@ export type Database = {
   }
   public: {
     Tables: {
-      extra_items: {
+      campaign_recipients: {
         Row: {
+          campaign_id: string
+          created_at: string | null
+          customer_id: string
+          delivered_at: string | null
+          error_message: string | null
           id: string
-          name: string
-          description: string
-          price: number
-          category: string
-          is_active: boolean
-          created_at: string
-          updated_at: string
+          message_status: string
+          read_at: string | null
+          sent_at: string | null
+          whatsapp_number: string
         }
         Insert: {
+          campaign_id: string
+          created_at?: string | null
+          customer_id: string
+          delivered_at?: string | null
+          error_message?: string | null
           id?: string
-          name: string
-          description: string
-          price: number
-          category: string
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
+          message_status?: string
+          read_at?: string | null
+          sent_at?: string | null
+          whatsapp_number: string
         }
         Update: {
+          campaign_id?: string
+          created_at?: string | null
+          customer_id?: string
+          delivered_at?: string | null
+          error_message?: string | null
           id?: string
-          name?: string
-          description?: string
-          price?: number
-          category?: string
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
+          message_status?: string
+          read_at?: string | null
+          sent_at?: string | null
+          whatsapp_number?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "campaign_recipients_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "promotion_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_recipients_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       cash_register: {
         Row: {
@@ -90,6 +111,208 @@ export type Database = {
             columns: ["operator_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_points_transactions: {
+        Row: {
+          created_at: string | null
+          customer_id: string
+          description: string | null
+          expires_at: string | null
+          id: string
+          order_id: string | null
+          points: number
+          referral_customer_id: string | null
+          transaction_type: string
+        }
+        Insert: {
+          created_at?: string | null
+          customer_id: string
+          description?: string | null
+          expires_at?: string | null
+          id?: string
+          order_id?: string | null
+          points: number
+          referral_customer_id?: string | null
+          transaction_type: string
+        }
+        Update: {
+          created_at?: string | null
+          customer_id?: string
+          description?: string | null
+          expires_at?: string | null
+          id?: string
+          order_id?: string | null
+          points?: number
+          referral_customer_id?: string | null
+          transaction_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_points_transactions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_points_transactions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_points_transactions_referral_customer_id_fkey"
+            columns: ["referral_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_referrals: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          first_order_id: string | null
+          id: string
+          referred_id: string
+          referred_points_earned: number | null
+          referrer_id: string
+          referrer_points_earned: number | null
+          status: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          first_order_id?: string | null
+          id?: string
+          referred_id: string
+          referred_points_earned?: number | null
+          referrer_id: string
+          referrer_points_earned?: number | null
+          status?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          first_order_id?: string | null
+          id?: string
+          referred_id?: string
+          referred_points_earned?: number | null
+          referrer_id?: string
+          referrer_points_earned?: number | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_referrals_first_order_id_fkey"
+            columns: ["first_order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_referrals_referred_id_fkey"
+            columns: ["referred_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_referrals_referrer_id_fkey"
+            columns: ["referrer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customers: {
+        Row: {
+          address: string | null
+          birth_date: string | null
+          city: string | null
+          created_at: string | null
+          email: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          notes: string | null
+          phone: string | null
+          points: number | null
+          referral_code: string | null
+          referred_by: string | null
+          state: string | null
+          tier: string
+          total_orders: number | null
+          total_points_earned: number | null
+          total_points_redeemed: number | null
+          total_spent: number | null
+          updated_at: string | null
+          whatsapp_number: string | null
+          whatsapp_verified: boolean | null
+          zip_code: string | null
+        }
+        Insert: {
+          address?: string | null
+          birth_date?: string | null
+          city?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          notes?: string | null
+          phone?: string | null
+          points?: number | null
+          referral_code?: string | null
+          referred_by?: string | null
+          state?: string | null
+          tier?: string
+          total_orders?: number | null
+          total_points_earned?: number | null
+          total_points_redeemed?: number | null
+          total_spent?: number | null
+          updated_at?: string | null
+          whatsapp_number?: string | null
+          whatsapp_verified?: boolean | null
+          zip_code?: string | null
+        }
+        Update: {
+          address?: string | null
+          birth_date?: string | null
+          city?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          points?: number | null
+          referral_code?: string | null
+          referred_by?: string | null
+          state?: string | null
+          tier?: string
+          total_orders?: number | null
+          total_points_earned?: number | null
+          total_points_redeemed?: number | null
+          total_spent?: number | null
+          updated_at?: string | null
+          whatsapp_number?: string | null
+          whatsapp_verified?: boolean | null
+          zip_code?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customers_referred_by_fkey"
+            columns: ["referred_by"]
+            isOneToOne: false
+            referencedRelation: "customers"
             referencedColumns: ["id"]
           },
         ]
@@ -139,7 +362,6 @@ export type Database = {
         Row: {
           closed_at: string | null
           closed_by: string | null
-          customer_name: string | null
           extras_total: number
           food_total: number
           id: string
@@ -155,7 +377,6 @@ export type Database = {
         Insert: {
           closed_at?: string | null
           closed_by?: string | null
-          customer_name?: string | null
           extras_total?: number
           food_total?: number
           id?: string
@@ -171,7 +392,6 @@ export type Database = {
         Update: {
           closed_at?: string | null
           closed_by?: string | null
-          customer_name?: string | null
           extras_total?: number
           food_total?: number
           id?: string
@@ -270,6 +490,137 @@ export type Database = {
         }
         Relationships: []
       }
+      promotion_campaigns: {
+        Row: {
+          campaign_name: string
+          completed_at: string | null
+          created_at: string | null
+          created_by: string | null
+          delivered_count: number | null
+          failed_count: number | null
+          id: string
+          promotion_id: string
+          read_count: number | null
+          scheduled_at: string | null
+          sent_count: number | null
+          started_at: string | null
+          status: string
+          target_criteria: Json | null
+          total_recipients: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          campaign_name: string
+          completed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          delivered_count?: number | null
+          failed_count?: number | null
+          id?: string
+          promotion_id: string
+          read_count?: number | null
+          scheduled_at?: string | null
+          sent_count?: number | null
+          started_at?: string | null
+          status?: string
+          target_criteria?: Json | null
+          total_recipients?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          campaign_name?: string
+          completed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          delivered_count?: number | null
+          failed_count?: number | null
+          id?: string
+          promotion_id?: string
+          read_count?: number | null
+          scheduled_at?: string | null
+          sent_count?: number | null
+          started_at?: string | null
+          status?: string
+          target_criteria?: Json | null
+          total_recipients?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "promotion_campaigns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "promotion_campaigns_promotion_id_fkey"
+            columns: ["promotion_id"]
+            isOneToOne: false
+            referencedRelation: "promotions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      promotions: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          description: string
+          discount_amount: number | null
+          discount_percentage: number | null
+          id: string
+          is_active: boolean | null
+          message_content: string
+          points_bonus: number | null
+          promotion_type: string
+          title: string
+          updated_at: string | null
+          valid_from: string | null
+          valid_until: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          description: string
+          discount_amount?: number | null
+          discount_percentage?: number | null
+          id?: string
+          is_active?: boolean | null
+          message_content: string
+          points_bonus?: number | null
+          promotion_type: string
+          title: string
+          updated_at?: string | null
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string
+          discount_amount?: number | null
+          discount_percentage?: number | null
+          id?: string
+          is_active?: boolean | null
+          message_content?: string
+          points_bonus?: number | null
+          promotion_type?: string
+          title?: string
+          updated_at?: string | null
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "promotions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_settings: {
         Row: {
           id: string
@@ -331,6 +682,71 @@ export type Database = {
           {
             foreignKeyName: "user_roles_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_connections: {
+        Row: {
+          api_key: string | null
+          api_url: string | null
+          created_at: string | null
+          created_by: string | null
+          error_message: string | null
+          id: string
+          instance_id: string
+          instance_name: string | null
+          last_connected_at: string | null
+          phone_name: string | null
+          phone_number: string | null
+          provider: string
+          qr_code: string | null
+          qr_code_expires_at: string | null
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          api_key?: string | null
+          api_url?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          error_message?: string | null
+          id?: string
+          instance_id: string
+          instance_name?: string | null
+          last_connected_at?: string | null
+          phone_name?: string | null
+          phone_number?: string | null
+          provider?: string
+          qr_code?: string | null
+          qr_code_expires_at?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          api_key?: string | null
+          api_url?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          error_message?: string | null
+          id?: string
+          instance_id?: string
+          instance_name?: string | null
+          last_connected_at?: string | null
+          phone_name?: string | null
+          phone_number?: string | null
+          provider?: string
+          qr_code?: string | null
+          qr_code_expires_at?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_connections_created_by_fkey"
+            columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
