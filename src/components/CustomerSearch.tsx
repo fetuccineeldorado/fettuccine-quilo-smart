@@ -39,11 +39,25 @@ const CustomerSearch = ({ onCustomerSelect, selectedCustomer, placeholder = "Bus
       return;
     }
 
-    const filtered = customers.filter(customer =>
-      customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.phone.includes(searchTerm)
-    );
+    const searchLower = searchTerm.toLowerCase().trim();
+    const searchNumber = searchTerm.replace(/\D/g, ''); // Remove caracteres não numéricos para busca por telefone
+
+    const filtered = customers.filter(customer => {
+      const nameMatch = customer.name?.toLowerCase().includes(searchLower) || false;
+      const emailMatch = customer.email?.toLowerCase().includes(searchLower) || false;
+      
+      // Busca por telefone (com ou sem formatação)
+      const phone = customer.phone || '';
+      const phoneClean = phone.replace(/\D/g, '');
+      const phoneMatch = phone.includes(searchTerm) || phoneClean.includes(searchNumber);
+      
+      // Busca por WhatsApp (com ou sem formatação)
+      const whatsapp = (customer as any).whatsapp_number || '';
+      const whatsappClean = typeof whatsapp === 'string' ? whatsapp.replace(/\D/g, '') : '';
+      const whatsappMatch = whatsapp.includes(searchTerm) || whatsappClean.includes(searchNumber);
+      
+      return nameMatch || emailMatch || phoneMatch || whatsappMatch;
+    });
     setFilteredCustomers(filtered);
   }, [searchTerm, customers]);
 
@@ -62,18 +76,55 @@ const CustomerSearch = ({ onCustomerSelect, selectedCustomer, placeholder = "Bus
   const fetchCustomers = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // Tentar buscar com todos os campos primeiro
+      let result = await supabase
         .from("customers")
         .select("*")
         .order("name");
 
-      if (error) {
-        console.error("Erro ao carregar clientes:", error);
+      let customersData = result.data;
+      let customersError = result.error;
+
+      // Se falhar por causa de colunas faltando, tentar com campos básicos
+      if (
+        customersError &&
+        (customersError.code === "PGRST116" ||
+          customersError.message?.includes("Could not find") ||
+          customersError.message?.includes("column") ||
+          customersError.status === 400)
+      ) {
+        console.log(
+          "Tentando buscar apenas com campos básicos devido a erro:",
+          customersError.message
+        );
+        result = await supabase
+          .from("customers")
+          .select("id, name, email, phone, tier, total_orders, total_spent, created_at, updated_at")
+          .order("name");
+        
+        customersData = result.data;
+        customersError = result.error;
+      }
+
+      if (customersError) {
+        console.error("Erro ao carregar clientes:", customersError);
+        // Continuar mesmo com erro, usando array vazio
+        setCustomers([]);
       } else {
-        setCustomers(data || []);
+        // Garantir que todos os campos necessários existam
+        const processedCustomers = (customersData || []).map(customer => ({
+          ...customer,
+          phone: customer.phone || '',
+          email: customer.email || '',
+          tier: customer.tier || 'bronze',
+          total_orders: customer.total_orders || 0,
+          total_spent: customer.total_spent || 0,
+        }));
+        setCustomers(processedCustomers);
       }
     } catch (error) {
       console.error("Erro ao carregar clientes:", error);
+      setCustomers([]);
     } finally {
       setLoading(false);
     }
@@ -91,10 +142,20 @@ const CustomerSearch = ({ onCustomerSelect, selectedCustomer, placeholder = "Bus
   };
 
   const handleCustomerSelect = (customer: Customer) => {
-    onCustomerSelect(customer);
-    setSearchTerm(customer.name);
-    setShowDropdown(false);
-    setIsManualInput(false);
+    try {
+      // Validar que o customer tem os campos necessários
+      if (!customer || !customer.id || !customer.name) {
+        console.error("Cliente inválido selecionado:", customer);
+        return;
+      }
+      
+      onCustomerSelect(customer);
+      setSearchTerm(customer.name || '');
+      setShowDropdown(false);
+      setIsManualInput(false);
+    } catch (error) {
+      console.error("Erro ao selecionar cliente:", error);
+    }
   };
 
   const handleClearSelection = () => {
@@ -202,12 +263,18 @@ const CustomerSearch = ({ onCustomerSelect, selectedCustomer, placeholder = "Bus
                           <div className="min-w-0 flex-1">
                             <p className="font-medium truncate">{customer.name}</p>
                             <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 text-sm text-muted-foreground">
-                              {customer.phone && (
+                              {(customer as any).whatsapp_number ? (
+                                <div className="flex items-center gap-1">
+                                  <Phone className="h-3 w-3" />
+                                  <span className="truncate">{(customer as any).whatsapp_number}</span>
+                                  <span className="text-xs text-green-600">WhatsApp</span>
+                                </div>
+                              ) : customer.phone ? (
                                 <div className="flex items-center gap-1">
                                   <Phone className="h-3 w-3" />
                                   <span className="truncate">{customer.phone}</span>
                                 </div>
-                              )}
+                              ) : null}
                               {customer.email && (
                                 <div className="flex items-center gap-1">
                                   <Mail className="h-3 w-3" />
@@ -250,9 +317,11 @@ const CustomerSearch = ({ onCustomerSelect, selectedCustomer, placeholder = "Bus
                 <div className="min-w-0 flex-1">
                   <p className="font-medium truncate">{selectedCustomer.name}</p>
                   <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 text-sm text-muted-foreground">
-                    {selectedCustomer.phone && (
+                    {(selectedCustomer as any).whatsapp_number ? (
+                      <span className="truncate">{(selectedCustomer as any).whatsapp_number} <span className="text-xs text-green-600">(WhatsApp)</span></span>
+                    ) : selectedCustomer.phone ? (
                       <span className="truncate">{selectedCustomer.phone}</span>
-                    )}
+                    ) : null}
                     {selectedCustomer.email && (
                       <span className="truncate">{selectedCustomer.email}</span>
                     )}

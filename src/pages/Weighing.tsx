@@ -175,19 +175,46 @@ const Weighing = () => {
     }
   };
 
-  const handleCustomerSelect = (customer: {
-    id: string;
-    name: string;
-    email: string;
-    phone: string;
-    tier: 'bronze' | 'silver' | 'gold' | 'platinum';
-    total_orders: number;
-    total_spent: number;
-  } | null) => {
-    setSelectedCustomer(customer);
-    if (customer) {
-      setCustomerName(customer.name);
-    } else {
+  const handleCustomerSelect = (customer: any | null) => {
+    try {
+      if (!customer) {
+        setSelectedCustomer(null);
+        setCustomerName("");
+        return;
+      }
+
+      // Validar e normalizar os dados do cliente
+      if (!customer.id || !customer.name) {
+        console.error("Cliente inválido:", customer);
+        toast({
+          title: "Erro ao selecionar cliente",
+          description: "Cliente selecionado não possui dados válidos",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Normalizar dados do cliente com valores padrão
+      const normalizedCustomer = {
+        id: customer.id,
+        name: customer.name || '',
+        email: customer.email || '',
+        phone: customer.phone || '',
+        tier: (customer.tier || 'bronze') as 'bronze' | 'silver' | 'gold' | 'platinum',
+        total_orders: customer.total_orders || 0,
+        total_spent: customer.total_spent || 0,
+      };
+
+      setSelectedCustomer(normalizedCustomer);
+      setCustomerName(normalizedCustomer.name);
+    } catch (error: any) {
+      console.error("Erro ao selecionar cliente:", error);
+      toast({
+        title: "Erro ao selecionar cliente",
+        description: error.message || "Ocorreu um erro ao selecionar o cliente",
+        variant: "destructive",
+      });
+      setSelectedCustomer(null);
       setCustomerName("");
     }
   };
