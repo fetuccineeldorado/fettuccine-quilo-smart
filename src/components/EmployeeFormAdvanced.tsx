@@ -111,29 +111,30 @@ const EmployeeFormAdvanced = ({ employeeId, onSuccess, onCancel }: EmployeeFormA
       if (error) throw error;
 
       if (data) {
+        const employee = data as any;
         setFormData({
-          name: data.name || "",
-          cpf: data.cpf || "",
-          email: data.email || "",
-          phone: data.phone || "",
-          address: data.address || "",
-          city: data.city || "",
-          state: data.state || "",
-          zip_code: data.zip_code || "",
-          role: data.role || "cashier",
-          department: data.department || "",
-          hire_date: data.hire_date ? new Date(data.hire_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-          salary: data.salary ? data.salary.toString() : "",
-          notes: data.notes || "",
+          name: employee.name || "",
+          cpf: employee.cpf || "",
+          email: employee.email || "",
+          phone: employee.phone || "",
+          address: employee.address || "",
+          city: employee.city || "",
+          state: employee.state || "",
+          zip_code: employee.zip_code || "",
+          role: employee.role || "cashier",
+          department: employee.department || "",
+          hire_date: employee.hire_date ? new Date(employee.hire_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          salary: employee.salary ? employee.salary.toString() : "",
+          notes: employee.notes || "",
         });
 
-        if (data.facial_photo_url) {
-          setPhotoUrl(data.facial_photo_url);
+        if (employee.facial_photo_url) {
+          setPhotoUrl(employee.facial_photo_url);
         }
 
         // Validar CPF existente
-        if (data.cpf) {
-          const isValid = validateCPF(data.cpf);
+        if (employee.cpf) {
+          const isValid = validateCPF(employee.cpf);
           setCpfValid(isValid);
         }
       }

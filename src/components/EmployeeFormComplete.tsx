@@ -78,19 +78,20 @@ const EmployeeFormComplete = ({ employeeId, onSuccess, onCancel }: EmployeeFormC
       if (error) throw error;
 
       if (data) {
+        const employee = data as any;
         setFormData({
-          name: data.name || "",
-          cpf: data.cpf || "",
-          email: data.email || "",
-          phone: data.phone || "",
-          address: data.address || "",
-          role: data.role || "cashier",
-          department: data.department || "",
-          hire_date: data.hire_date || new Date().toISOString().split("T")[0],
-          salary: data.salary ? data.salary.toString() : "",
-          notes: data.notes || "",
+          name: employee.name || "",
+          cpf: employee.cpf || "",
+          email: employee.email || "",
+          phone: employee.phone || "",
+          address: employee.address || "",
+          role: (employee.role || "cashier") as "admin" | "cashier" | "kitchen" | "manager" | "waiter",
+          department: employee.department || "",
+          hire_date: employee.hire_date || new Date().toISOString().split("T")[0],
+          salary: employee.salary ? employee.salary.toString() : "",
+          notes: employee.notes || "",
         });
-        setPhotoUrl(data.photo_url);
+        setPhotoUrl(employee.facial_photo_url);
       }
     } catch (error) {
       console.error("Erro ao carregar funcionário:", error);

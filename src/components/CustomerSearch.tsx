@@ -90,8 +90,7 @@ const CustomerSearch = ({ onCustomerSelect, selectedCustomer, placeholder = "Bus
         customersError &&
         (customersError.code === "PGRST116" ||
           customersError.message?.includes("Could not find") ||
-          customersError.message?.includes("column") ||
-          customersError.status === 400)
+          customersError.message?.includes("column"))
       ) {
         console.log(
           "Tentando buscar apenas com campos básicos devido a erro:",
@@ -99,7 +98,7 @@ const CustomerSearch = ({ onCustomerSelect, selectedCustomer, placeholder = "Bus
         );
         result = await supabase
           .from("customers")
-          .select("id, name, email, phone, tier, total_orders, total_spent, created_at, updated_at")
+          .select("*")
           .order("name");
         
         customersData = result.data;

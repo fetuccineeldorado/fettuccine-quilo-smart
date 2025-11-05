@@ -184,7 +184,7 @@ const MediaUpload = ({
 
       toast({
         title: "Upload concluído!",
-        description: `${getMediaTypeLabel(mediaType)} enviado com sucesso`,
+        description: `${getMediaTypeLabel(mediaFile.type)} enviado com sucesso`,
       });
     } catch (error: any) {
       console.error('Erro ao fazer upload:', error);

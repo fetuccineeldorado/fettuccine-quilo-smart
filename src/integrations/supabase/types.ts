@@ -317,38 +317,133 @@ export type Database = {
           },
         ]
       }
+      employees: {
+        Row: {
+          address: string | null
+          city: string | null
+          cpf: string
+          created_at: string | null
+          created_by: string | null
+          department: string
+          email: string
+          facial_encoding: string | null
+          facial_photo_url: string | null
+          hire_date: string
+          id: string
+          is_active: boolean | null
+          name: string
+          notes: string | null
+          phone: string | null
+          role: string
+          salary: number | null
+          state: string | null
+          updated_at: string | null
+          zip_code: string | null
+        }
+        Insert: {
+          address?: string | null
+          city?: string | null
+          cpf: string
+          created_at?: string | null
+          created_by?: string | null
+          department: string
+          email: string
+          facial_encoding?: string | null
+          facial_photo_url?: string | null
+          hire_date: string
+          id?: string
+          is_active?: boolean | null
+          name: string
+          notes?: string | null
+          phone?: string | null
+          role?: string
+          salary?: number | null
+          state?: string | null
+          updated_at?: string | null
+          zip_code?: string | null
+        }
+        Update: {
+          address?: string | null
+          city?: string | null
+          cpf?: string
+          created_at?: string | null
+          created_by?: string | null
+          department?: string
+          email?: string
+          facial_encoding?: string | null
+          facial_photo_url?: string | null
+          hire_date?: string
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          role?: string
+          salary?: number | null
+          state?: string | null
+          updated_at?: string | null
+          zip_code?: string | null
+        }
+        Relationships: []
+      }
       extra_items: {
         Row: {
           category: string | null
           created_at: string | null
+          current_stock: number | null
           description: string | null
           id: string
           is_active: boolean | null
+          max_stock: number | null
+          min_stock: number | null
           name: string
           price: number
+          product_id: string | null
+          track_stock: boolean | null
+          unit: string | null
           updated_at: string | null
         }
         Insert: {
           category?: string | null
           created_at?: string | null
+          current_stock?: number | null
           description?: string | null
           id?: string
           is_active?: boolean | null
+          max_stock?: number | null
+          min_stock?: number | null
           name: string
           price: number
+          product_id?: string | null
+          track_stock?: boolean | null
+          unit?: string | null
           updated_at?: string | null
         }
         Update: {
           category?: string | null
           created_at?: string | null
+          current_stock?: number | null
           description?: string | null
           id?: string
           is_active?: boolean | null
+          max_stock?: number | null
+          min_stock?: number | null
           name?: string
           price?: number
+          product_id?: string | null
+          track_stock?: boolean | null
+          unit?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "extra_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       inventory_movements: {
         Row: {
@@ -597,16 +692,20 @@ export type Database = {
           barcode: string | null
           category_id: string | null
           cost: number | null
+          cost_price: number | null
           created_at: string | null
           description: string | null
           id: string
           image_url: string | null
           is_active: boolean | null
+          is_tracked: boolean | null
           max_stock_level: number | null
           min_stock_level: number | null
           name: string
           price: number
+          selling_price: number | null
           sku: string | null
+          status: string | null
           stock_quantity: number | null
           tags: string[] | null
           unit: string | null
@@ -616,16 +715,20 @@ export type Database = {
           barcode?: string | null
           category_id?: string | null
           cost?: number | null
+          cost_price?: number | null
           created_at?: string | null
           description?: string | null
           id?: string
           image_url?: string | null
           is_active?: boolean | null
+          is_tracked?: boolean | null
           max_stock_level?: number | null
           min_stock_level?: number | null
           name: string
           price: number
+          selling_price?: number | null
           sku?: string | null
+          status?: string | null
           stock_quantity?: number | null
           tags?: string[] | null
           unit?: string | null
@@ -635,16 +738,20 @@ export type Database = {
           barcode?: string | null
           category_id?: string | null
           cost?: number | null
+          cost_price?: number | null
           created_at?: string | null
           description?: string | null
           id?: string
           image_url?: string | null
           is_active?: boolean | null
+          is_tracked?: boolean | null
           max_stock_level?: number | null
           min_stock_level?: number | null
           name?: string
           price?: number
+          selling_price?: number | null
           sku?: string | null
+          status?: string | null
           stock_quantity?: number | null
           tags?: string[] | null
           unit?: string | null
