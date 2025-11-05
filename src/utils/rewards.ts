@@ -45,7 +45,7 @@ class RewardsService {
   ): Promise<number> {
     try {
       // Buscar regra ativa de pontos por real
-      const { data: rules, error } = await supabase
+      const { data: rules, error } = await (supabase as any)
         .from('reward_rules')
         .select('*')
         .eq('rule_type', 'points_per_real')
@@ -64,7 +64,7 @@ class RewardsService {
         return Math.floor(orderAmount);
       }
 
-      const rule = rules[0] as RewardRule;
+      const rule = rules[0] as any;
       let points = orderAmount * rule.points_per_unit;
 
       // Aplicar bônus de tier se aplicável
@@ -92,7 +92,7 @@ class RewardsService {
    */
   async getTierBonus(tier: string): Promise<number> {
     try {
-      const { data: rules, error } = await supabase
+      const { data: rules, error } = await (supabase as any)
         .from('reward_rules')
         .select('*')
         .eq('rule_type', 'tier_bonus')
@@ -201,7 +201,7 @@ class RewardsService {
       // Criar registro de resgate
       const discountAmount = this.calculateDiscountFromPoints(points);
       
-      const { data: redemption, error: redemptionError } = await supabase
+      const { data: redemption, error: redemptionError } = await (supabase as any)
         .from('customer_redemptions')
         .insert({
           customer_id: customerId,

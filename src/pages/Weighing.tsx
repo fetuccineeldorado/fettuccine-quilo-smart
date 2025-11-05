@@ -1215,7 +1215,7 @@ ${ThermalPrinter.FEED}${ThermalPrinter.FEED}${ThermalPrinter.CUT}
               {!addToExistingOrder && (
                 <CustomerSearch
                   onCustomerSelect={handleCustomerSelect}
-                  selectedCustomer={selectedCustomer}
+                  selectedCustomer={selectedCustomer as any}
                   placeholder="Buscar cliente cadastrado ou digite nome..."
                   onManualNameChange={(name) => setCustomerName(name)}
                 />

@@ -93,10 +93,13 @@ const ProductManager = () => {
 
       if (error) throw error;
 
-      const productsWithCategories = data?.map(product => ({
+      const productsWithCategories = (data?.map(product => ({
         ...product,
-        category_name: product.product_categories?.name,
-      })) || [];
+        category_name: (product as any).product_categories?.name,
+        min_stock: product.min_stock_level || 0,
+        max_stock: product.max_stock_level,
+        current_stock: product.stock_quantity || 0,
+      })) || []) as any;
 
       setProducts(productsWithCategories);
     } catch (error) {
@@ -166,7 +169,7 @@ const ProductManager = () => {
       } else {
         const { error } = await supabase
           .from("products")
-          .insert([productData]);
+          .insert([productData as any]);
 
         if (error) throw error;
 

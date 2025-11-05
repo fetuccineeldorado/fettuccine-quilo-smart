@@ -59,7 +59,7 @@ const ExtraItemsSelector = ({ selectedItems, onItemsChange }: ExtraItemsSelector
       if (productIds.length > 0) {
         const { data: productsData } = await supabase
           .from("products")
-          .select("id, name, current_stock, min_stock, max_stock")
+          .select("id, name, stock_quantity, min_stock_level, max_stock_level")
           .in("id", productIds);
 
         if (productsData) {

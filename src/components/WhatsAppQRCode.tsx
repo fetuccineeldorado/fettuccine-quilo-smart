@@ -323,8 +323,9 @@ const WhatsAppQRCode = ({ onConnected }: WhatsAppQRCodeProps) => {
         }
       } else if (result.success && result.status === 'connecting') {
         // Garantir que o QR Code permaneça visível enquanto estiver conectando
-        if (result.qrCode) {
-          setQrCode(result.qrCode.startsWith('data:') ? result.qrCode : `data:image/png;base64,${result.qrCode}`);
+        const qr = (result as any).qrCode;
+        if (qr) {
+          setQrCode(qr.startsWith('data:') ? qr : `data:image/png;base64,${qr}`);
         }
         setConnecting(true);
       } else if (result.success && result.status === 'disconnected') {

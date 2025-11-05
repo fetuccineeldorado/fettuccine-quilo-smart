@@ -139,7 +139,7 @@ class BulkMessagingService {
         if (!ordersError && ordersData) {
           const recentCustomerIds = new Set(
             ordersData
-              .map(o => o.customer_id)
+              .map(o => (o as any).customer_id)
               .filter(id => id !== null)
           );
           customerIds = customerIds.filter(id => recentCustomerIds.has(id));
@@ -279,15 +279,16 @@ class BulkMessagingService {
       if (!finalMedia && campaign.promotion_id) {
         const { data: promotion } = await supabase
           .from('promotions')
-          .select('media_url, media_type, media_filename, media_mime_type')
+          .select('*')
           .eq('id', campaign.promotion_id)
           .maybeSingle();
 
-        if (promotion && promotion.media_url && promotion.media_type) {
+        const promo = promotion as any;
+        if (promo && promo.media_url && promo.media_type) {
           finalMedia = {
-            file: null as any, // Não temos o arquivo, apenas a URL
-            type: promotion.media_type as 'image' | 'video' | 'audio',
-            url: promotion.media_url,
+            file: null as any,
+            type: promo.media_type as 'image' | 'video' | 'audio',
+            url: promo.media_url,
           };
         }
       }

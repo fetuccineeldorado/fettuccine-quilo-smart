@@ -71,7 +71,7 @@ const AdminTimeReports = () => {
   const loadRecords = async () => {
     try {
       setLoading(true);
-      let query = supabase
+      let query = (supabase as any)
         .from("time_records")
         .select(`
           *,

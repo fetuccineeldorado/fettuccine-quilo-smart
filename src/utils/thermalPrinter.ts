@@ -216,7 +216,7 @@ export class ThermalPrinter {
       }
 
       // Fallback para Web USB API
-      if (navigator.usb) {
+      if ((navigator as any).usb) {
         return await this.webUSBPrint(receipt);
       }
 
@@ -273,9 +273,9 @@ export class ThermalPrinter {
   // Tentar impressão via Web Serial
   private static async trySerialPrint(receipt: string): Promise<boolean> {
     try {
-      if (!navigator.serial) return false;
+      if (!(navigator as any).serial) return false;
 
-      const port = await navigator.serial.requestPort({
+      const port = await (navigator as any).serial.requestPort({
         filters: [
           { usbVendorId: 0x04b8 }, // Epson
           { usbVendorId: 0x04a9 }, // Canon
@@ -299,9 +299,9 @@ export class ThermalPrinter {
   // Tentar impressão via Web Bluetooth
   private static async tryBluetoothPrint(receipt: string): Promise<boolean> {
     try {
-      if (!navigator.bluetooth) return false;
+      if (!(navigator as any).bluetooth) return false;
 
-      const device = await navigator.bluetooth.requestDevice({
+      const device = await (navigator as any).bluetooth.requestDevice({
         filters: [
           { namePrefix: 'Printer' },
           { namePrefix: 'EPSON' },
@@ -328,7 +328,7 @@ export class ThermalPrinter {
   private static async webUSBPrint(receipt: string): Promise<boolean> {
     try {
       // Solicitar acesso à impressora USB
-      const device = await navigator.usb.requestDevice({
+      const device = await (navigator as any).usb.requestDevice({
         filters: [
           { vendorId: 0x04b8 }, // Epson
           { vendorId: 0x04a9 }, // Canon
@@ -478,14 +478,14 @@ export class ThermalPrinter {
   }
 
   // Detectar impressoras USB disponíveis
-  static async detectUSBPrinters(): Promise<USBDevice[]> {
+  static async detectUSBPrinters(): Promise<any[]> {
     try {
-      if (!navigator.usb) {
+      if (!(navigator as any).usb) {
         console.warn('Web USB API não disponível');
         return [];
       }
 
-      const devices = await navigator.usb.getDevices();
+      const devices = await (navigator as any).usb.getDevices();
       return devices.filter(device => {
         // Filtrar dispositivos que podem ser impressoras
         const vendorId = device.vendorId;
@@ -643,16 +643,16 @@ export class ThermalPrinter {
         <div class="section">
           <div class="section-title">➕ Itens Extra</div>
           ${validExtraItems.map((item, index) => {
-            if (!item || !item.name || !item.quantity || !item.price) {
+            if (!item || !item.name || !item.quantity || !(item as any).price) {
               console.warn('Item extra inválido ignorado:', item);
               return '';
             }
-            const total = Number(item.price) * item.quantity;
+            const total = Number((item as any).price) * item.quantity;
             return `
               <div class="item-row">
                 <div class="item-name">${index + 1}. ${item.quantity}x ${item.name.toUpperCase()}</div>
                 <div class="item-details">
-                  R$ ${Number(item.price).toFixed(2)} × ${item.quantity}
+                  R$ ${Number((item as any).price).toFixed(2)} × ${item.quantity}
                 </div>
                 <div class="item-price">R$ ${total.toFixed(2)}</div>
               </div>
@@ -1024,7 +1024,7 @@ export class ThermalPrinter {
         extra_items_total: 25.00,
         total_amount: 52.45,
         created_at: new Date().toISOString(),
-      };
+      } as any;
 
       const testExtraItems = [
         {
@@ -1046,7 +1046,7 @@ export class ThermalPrinter {
         testOrder.customer_name,
         testOrder.total_weight,
         testOrder.food_total,
-        testExtraItems,
+        testExtraItems as any,
         testOrder.extra_items_total
       );
 
@@ -1083,8 +1083,8 @@ export class ThermalPrinter {
         console.log(`Item extra ${index}:`, {
           name: item?.name,
           quantity: item?.quantity,
-          price: item?.price,
-          válido: !!(item?.name && item?.quantity && item?.price)
+          price: (item as any)?.price,
+          válido: !!(item?.name && item?.quantity && (item as any)?.price)
         });
       });
     }

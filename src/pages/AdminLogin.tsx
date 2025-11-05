@@ -35,24 +35,30 @@ const AdminLogin = () => {
         throw new Error("Erro ao autenticar usuário");
       }
 
-      // Verificar se é admin
-      const { data: adminData, error: adminError } = await supabase
-        .from("admin_users")
-        .select("*")
-        .eq("id", data.user.id)
-        .eq("is_active", true)
-        .maybeSingle();
+      // Verificar se é admin através da tabela user_roles
+      const { data: roleData, error: roleError } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", data.user.id)
+        .single();
 
-      if (adminError) throw adminError;
+      if (roleError) throw roleError;
 
-      if (!adminData) {
+      if (!roleData || (roleData.role !== 'admin' && roleData.role !== 'manager')) {
         await supabase.auth.signOut();
         throw new Error("Usuário não possui permissão de administrador");
       }
 
+      // Buscar perfil do usuário
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", data.user.id)
+        .single();
+
       toast({
         title: "Login realizado!",
-        description: `Bem-vindo, ${adminData.full_name}`,
+        description: `Bem-vindo, ${profileData?.full_name || data.user.email}`,
       });
 
       navigate("/dashboard/employees/admin");

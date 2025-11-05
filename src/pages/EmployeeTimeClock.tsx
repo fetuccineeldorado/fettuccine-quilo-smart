@@ -53,7 +53,7 @@ const EmployeeTimeClock = () => {
       }
 
       // Tentar buscar por user_id primeiro, depois por email
-      let { data, error } = await supabase
+      let { data, error } = await (supabase as any)
         .from("employees")
         .select("*")
         .eq("user_id", user.id)
@@ -90,7 +90,7 @@ const EmployeeTimeClock = () => {
       setEmployee(data);
 
       // Carregar encoding facial se existir
-      if (data.face_photo_url) {
+      if (data.facial_photo_url) {
         try {
           // Aqui você pode carregar a foto e extrair o encoding
           // Por enquanto, vamos simular ou usar um método alternativo
@@ -111,7 +111,7 @@ const EmployeeTimeClock = () => {
 
   const loadCompanyLocation = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("company_locations")
         .select("*")
         .eq("is_active", true)
@@ -184,7 +184,7 @@ const EmployeeTimeClock = () => {
     if (!employee) return;
 
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("time_clock")
         .select("*")
         .eq("employee_id", employee.id)
@@ -302,7 +302,7 @@ const EmployeeTimeClock = () => {
 
   const logFailedAttempt = async (attemptType: string, errorMessage: string, faceScore?: number) => {
     try {
-      await supabase.from("failed_attempts").insert({
+      await (supabase as any).from("failed_attempts").insert({
         employee_id: employee?.id || null,
         attempt_type: attemptType,
         face_match_score: faceScore || null,
@@ -389,7 +389,7 @@ const EmployeeTimeClock = () => {
       photoUrl = photo;
 
       // Inserir registro de ponto
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("time_clock")
         .insert({
           employee_id: employee.id,

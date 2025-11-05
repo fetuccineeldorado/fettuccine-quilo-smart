@@ -56,7 +56,7 @@ const AdminEmployeeManagement = () => {
         .order("name");
 
       if (error) throw error;
-      setEmployees(data || []);
+      setEmployees((data || []) as any);
     } catch (error: any) {
       toast({
         title: "Erro ao carregar funcionários",

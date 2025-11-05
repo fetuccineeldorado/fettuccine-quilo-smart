@@ -39,10 +39,10 @@ const StockAlerts = () => {
 
       if (error) throw error;
 
-      const alertsWithProductNames = data?.map(alert => ({
+      const alertsWithProductNames = (data?.map(alert => ({
         ...alert,
-        product_name: alert.products?.name,
-      })) || [];
+        product_name: (alert as any).products?.name,
+      })) || []) as any;
 
       setAlerts(alertsWithProductNames);
     } catch (error) {

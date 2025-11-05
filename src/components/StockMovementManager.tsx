@@ -60,12 +60,12 @@ const StockMovementManager = () => {
     try {
       const { data, error } = await supabase
         .from("products")
-        .select("id, name, current_stock, unit, min_stock")
-        .eq("status", "active")
+        .select("id, name, stock_quantity, unit, min_stock_level")
+        .eq("is_active", true)
         .order("name");
 
       if (error) throw error;
-      setProducts(data || []);
+      setProducts((data || []) as any);
     } catch (error) {
       console.error("Erro ao carregar produtos:", error);
       toast({
@@ -92,10 +92,11 @@ const StockMovementManager = () => {
 
       if (error) throw error;
 
-      const movementsWithProductNames = data?.map(movement => ({
+      const movementsWithProductNames = (data?.map(movement => ({
         ...movement,
-        product_name: movement.products?.name,
-      })) || [];
+        product_name: (movement as any).products?.name,
+        operator_id: movement.moved_by,
+      })) || []) as any;
 
       setMovements(movementsWithProductNames);
     } catch (error) {

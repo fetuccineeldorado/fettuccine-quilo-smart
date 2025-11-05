@@ -48,7 +48,7 @@ class ReferralService {
       }
 
       // Gerar novo código usando função do banco
-      const { data: newCode, error: codeError } = await supabase
+      const { data: newCode, error: codeError } = await (supabase as any)
         .rpc('generate_referral_code');
 
       if (codeError || !newCode) {
@@ -201,7 +201,7 @@ class ReferralService {
       }
 
       // Buscar regra de bônus de indicação
-      const { data: rules, error: rulesError } = await supabase
+      const { data: rules, error: rulesError } = await (supabase as any)
         .from('reward_rules')
         .select('*')
         .eq('rule_type', 'referral_bonus')

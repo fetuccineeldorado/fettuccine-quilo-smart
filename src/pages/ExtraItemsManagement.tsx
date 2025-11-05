@@ -93,8 +93,7 @@ const ExtraItemsManagement = () => {
         itemsError &&
         (itemsError.code === "PGRST116" ||
           itemsError.message?.includes("Could not find") ||
-          itemsError.message?.includes("column") ||
-          itemsError.status === 400)
+          itemsError.message?.includes("column"))
       ) {
         console.log(
           "Tentando buscar apenas com campos básicos devido a erro:",
@@ -102,7 +101,7 @@ const ExtraItemsManagement = () => {
         );
         result = await supabase
           .from("extra_items")
-          .select("id, name, description, price, category, is_active, created_at, updated_at")
+          .select("*")
           .order("name");
         
         extraItemsData = result.data;
@@ -123,7 +122,7 @@ const ExtraItemsManagement = () => {
           .in("id", productIds);
 
         if (productsData) {
-          productsMap = productsData.reduce((acc, product) => {
+          productsMap = (productsData as any[]).reduce((acc, product) => {
             acc[product.id] = product;
             return acc;
           }, {} as Record<string, any>);
