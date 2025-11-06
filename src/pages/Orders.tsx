@@ -134,181 +134,254 @@ const Orders = () => {
     try {
       console.log('🔄 Iniciando exclusão da comanda...');
       
-      // Primeiro, deletar itens relacionados
-      console.log('🔄 Passo 1: Deletando itens da comanda...');
-      const { error: itemsError } = await supabase
-        .from("order_items")
-        .delete()
-        .eq("order_id", orderId);
-
-      if (itemsError) {
-        console.error('❌ Erro ao deletar itens da comanda:', itemsError);
-        throw itemsError;
-      }
-      console.log('✅ Itens da comanda deletados com sucesso');
-
-      // Deletar itens extras relacionados
-      console.log('🔄 Passo 2: Deletando itens extras...');
-      // Type assertion necessário pois order_extra_items não está nos tipos gerados
-      const { error: extraItemsError } = await (supabase
-        .from("order_extra_items" as any)
-        .delete()
-        .eq("order_id", orderId) as any);
-
-      if (extraItemsError) {
-        console.error('❌ Erro ao deletar itens extras da comanda:', extraItemsError);
-        throw extraItemsError;
-      }
-      console.log('✅ Itens extras deletados com sucesso');
-
-      // Deletar pagamentos relacionados
-      console.log('🔄 Passo 3: Deletando pagamentos...');
-      const { error: paymentsError } = await supabase
-        .from("payments")
-        .delete()
-        .eq("order_id", orderId);
-
-      if (paymentsError) {
-        console.error('❌ Erro ao deletar pagamentos da comanda:', paymentsError);
-        throw paymentsError;
-      }
-      console.log('✅ Pagamentos deletados com sucesso');
-
-      // Finalmente, deletar a comanda
-      console.log('🔄 Passo 4: Deletando comanda principal...');
-      console.log('🔍 ID da comanda a ser deletada:', orderId);
+      // ESTRATÉGIA: Tentar deletar tudo, mas não parar se houver erros em itens relacionados
+      // O importante é deletar a comanda principal, que pode ter CASCADE que deleta o resto
       
-      // Primeiro, verificar se a comanda existe
-      const { data: existingOrder, error: checkError } = await supabase
+      // Tentar deletar itens relacionados (mas não bloquear se falhar)
+      console.log('🔄 Tentando deletar itens relacionados...');
+      
+      // 1. Deletar itens da comanda (não crítico se falhar)
+      try {
+        const { error: itemsError } = await supabase
+          .from("order_items")
+          .delete()
+          .eq("order_id", orderId);
+        if (itemsError) {
+          console.warn('⚠️ Erro ao deletar itens (não crítico):', itemsError.message);
+        } else {
+          console.log('✅ Itens deletados');
+        }
+      } catch (e) {
+        console.warn('⚠️ Erro ao deletar itens (continuando):', e);
+      }
+
+      // 2. Deletar itens extras (não crítico se falhar ou se tabela não existir)
+      try {
+        const { error: extraItemsError } = await (supabase
+          .from("order_extra_items" as any)
+          .delete()
+          .eq("order_id", orderId) as any);
+        if (extraItemsError) {
+          if (extraItemsError.code === 'PGRST205') {
+            console.warn('⚠️ Tabela order_extra_items não existe (ok)');
+          } else {
+            console.warn('⚠️ Erro ao deletar itens extras (não crítico):', extraItemsError.message);
+          }
+        } else {
+          console.log('✅ Itens extras deletados');
+        }
+      } catch (e) {
+        console.warn('⚠️ Erro ao deletar itens extras (continuando):', e);
+      }
+
+      // 3. Deletar pagamentos (não crítico se falhar)
+      try {
+        const { error: paymentsError } = await supabase
+          .from("payments")
+          .delete()
+          .eq("order_id", orderId);
+        if (paymentsError) {
+          console.warn('⚠️ Erro ao deletar pagamentos (não crítico):', paymentsError.message);
+        } else {
+          console.log('✅ Pagamentos deletados');
+        }
+      } catch (e) {
+        console.warn('⚠️ Erro ao deletar pagamentos (continuando):', e);
+      }
+
+      // CRÍTICO: Deletar a comanda principal - isso é o mais importante
+      console.log('🔄 Deletando comanda principal...');
+      console.log('🔍 ID da comanda:', orderId);
+      
+      // Primeiro verificar se a comanda existe e se temos permissão
+      const { data: checkBefore, error: checkBeforeError } = await supabase
         .from("orders")
-        .select("id, order_number, status")
+        .select("id, order_number, status, opened_by")
         .eq("id", orderId)
-        .single();
-
-      if (checkError) {
-        console.error('❌ Erro ao verificar comanda:', checkError);
-        throw checkError;
+        .maybeSingle();
+      
+      if (checkBeforeError && checkBeforeError.code !== 'PGRST116') {
+        console.error('❌ Erro ao verificar comanda antes de deletar:', checkBeforeError);
+        throw checkBeforeError;
       }
       
-      console.log('🔍 Comanda encontrada:', existingOrder);
+      if (!checkBefore) {
+        console.warn('⚠️ Comanda não encontrada (pode já ter sido deletada)');
+        toast({
+          title: "Comanda não encontrada",
+          description: `A comanda #${orderNumber} não foi encontrada no banco de dados.`,
+          variant: "default",
+        });
+        await fetchOrders();
+        return;
+      }
+      
+      console.log('🔍 Comanda encontrada:', checkBefore);
       
       // Tentar deletar a comanda
-      const { error: orderError } = await supabase
+      const { data: deletedOrder, error: orderError, count } = await supabase
         .from("orders")
         .delete()
-        .eq("id", orderId);
+        .eq("id", orderId)
+        .select();
 
       if (orderError) {
-        console.error('❌ Erro ao deletar comanda:', orderError);
-        console.error('❌ Detalhes do erro:', {
-          code: orderError.code,
-          message: orderError.message,
-          details: orderError.details,
-          hint: orderError.hint
-        });
-        throw orderError;
+        console.error('❌ ERRO CRÍTICO ao deletar comanda:', orderError);
+        console.error('❌ Detalhes completos do erro:', JSON.stringify(orderError, null, 2));
+        console.error('❌ Código do erro:', orderError.code);
+        console.error('❌ Mensagem:', orderError.message);
+        console.error('❌ Details:', orderError.details);
+        console.error('❌ Hint:', orderError.hint);
+        
+        // Verificar se é erro de RLS
+        const isRLSError = 
+          orderError.code === 'PGRST301' || 
+          orderError.code === '42501' ||
+          orderError.message?.includes('permission denied') ||
+          orderError.message?.includes('row-level security') ||
+          orderError.message?.toLowerCase().includes('policy');
+        
+        if (isRLSError) {
+          const detailedError = `🔴 ERRO DE PERMISSÃO RLS (Row Level Security)
+
+📋 CÓDIGO DO ERRO: ${orderError.code}
+📋 MENSAGEM: ${orderError.message}
+
+📋 SOLUÇÃO DEFINITIVA:
+1. Acesse: https://supabase.com/dashboard
+2. Selecione seu projeto
+3. Vá em "SQL Editor"
+4. Execute o script: "fix delete orders ULTRA FORCE.sql"
+   (Este script remove TODAS as políticas antigas e cria novas)
+
+⚠️ IMPORTANTE:
+- Execute o script ULTRA FORCE (não o script normal)
+- Verifique se apareceu a mensagem de sucesso
+- Recarregue a página (F5) e limpe o cache (Ctrl+Shift+R)
+- Tente novamente
+
+💡 Se ainda não funcionar, verifique:
+- Se você está autenticado no sistema
+- Se há outras políticas RLS bloqueando
+- Execute o script novamente`;
+          
+          console.error('🔴 ERRO DE RLS DETECTADO:', detailedError);
+          throw new Error(detailedError);
+        }
+        
+        // Outros erros
+        const genericError = `🔴 ERRO AO EXCLUIR COMANDA
+
+📋 CÓDIGO: ${orderError.code || 'N/A'}
+📋 MENSAGEM: ${orderError.message || 'Erro desconhecido'}
+${orderError.details ? `📋 DETALHES: ${orderError.details}` : ''}
+${orderError.hint ? `💡 DICA: ${orderError.hint}` : ''}
+
+📋 TENTE:
+1. Recarregar a página (F5)
+2. Limpar cache do navegador (Ctrl+Shift+R)
+3. Verificar se está autenticado
+4. Executar o script "fix delete orders ULTRA FORCE.sql" no Supabase`;
+        
+        throw new Error(genericError);
       }
       
-      console.log('✅ Comanda principal deletada com sucesso');
+      // Verificar se realmente foi deletada
+      if (deletedOrder && deletedOrder.length > 0) {
+        console.log('✅ Comanda deletada com sucesso!', deletedOrder);
+      } else {
+        console.warn('⚠️ Delete executado mas nenhum registro deletado. Verificando...');
+        
+        // Verificar se ainda existe
+        const { data: checkAfter, error: verifyError } = await supabase
+          .from("orders")
+          .select("id")
+          .eq("id", orderId)
+          .maybeSingle();
+        
+        if (verifyError && verifyError.code === 'PGRST116') {
+          console.log('✅ Comanda confirmada como deletada (não encontrada)');
+        } else if (checkAfter) {
+          console.error('❌ ERRO CRÍTICO: Comanda ainda existe após tentativa de exclusão!', checkAfter);
+          console.error('❌ Isso indica que a política RLS está bloqueando a exclusão.');
+          
+          throw new Error(`🔴 ERRO: A comanda não foi deletada do banco de dados!\n\n📋 CAUSA: Política RLS (Row Level Security) está bloqueando a exclusão.\n\n📋 SOLUÇÃO:\n1. Acesse: https://supabase.com/dashboard\n2. Selecione seu projeto\n3. Clique em "SQL Editor"\n4. Execute o script: CORRIGIR_TUDO_SQL_COMPLETO.sql\n\nEste script cria a política RLS necessária para permitir que usuários autenticados deletem comandas.`);
+        } else {
+          console.log('✅ Comanda confirmada como deletada');
+        }
+      }
 
       console.log('🎉 Exclusão concluída com sucesso!');
       
-      // Remover comanda do estado local imediatamente
-      console.log('🔄 Removendo comanda do estado local...');
-      console.log('📊 Estado atual antes da remoção:', orders.length, 'comandas');
-      console.log('🎯 ID da comanda a ser removida:', orderId);
-      
-      // Forçar remoção imediata usando uma abordagem mais direta
-      const updatedOrders = orders.filter(order => {
-        const shouldKeep = order.id !== orderId;
-        console.log(`🔍 Comanda ${order.order_number} (${order.id}): ${shouldKeep ? 'MANTER' : 'REMOVER'}`);
-        return shouldKeep;
-      });
-      
-      console.log('📋 Comandas após filtro:', updatedOrders.map(o => ({ id: o.id, number: o.order_number })));
-      console.log('✅ Comanda removida do estado local. Total restante:', updatedOrders.length);
-      
-      // Atualizar o estado diretamente
-      setOrders(updatedOrders);
-      
-      // Verificar se o estado foi atualizado
-      console.log('🔄 Verificando se o estado foi atualizado...');
-      setTimeout(() => {
-        console.log('📊 Estado após atualização:', orders.length, 'comandas');
-        console.log('📋 IDs atuais:', orders.map(o => ({ id: o.id, number: o.order_number })));
-      }, 100);
-      
+      // Mostrar toast de sucesso
       toast({
-        title: "Comanda excluída!",
-        description: `Comanda #${orderNumber} foi excluída com sucesso.`,
+        title: "✅ Comanda excluída!",
+        description: `Comanda #${orderNumber} foi excluída do banco de dados com sucesso.`,
       });
 
-      // Recarregar comandas para garantir sincronização
+      // Remover comanda do estado local imediatamente
+      setOrders(prevOrders => {
+        const filtered = prevOrders.filter(order => order.id !== orderId);
+        console.log(`✅ Comanda removida do estado. Total: ${prevOrders.length} → ${filtered.length}`);
+        return filtered;
+      });
+
+      // Recarregar comandas do banco para garantir sincronização
+      console.log('🔄 Recarregando comandas do banco...');
       await fetchOrders();
-
-      // Forçar re-renderização
-      console.log('🔄 Forçando re-renderização...');
-      setRefreshKey(prev => prev + 1);
-
-      // Aguardar um pouco para garantir que o estado foi atualizado
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Verificar se a comanda foi realmente excluída do banco
-      console.log('🔍 Verificando se a comanda foi excluída do banco...');
-      const { data: checkData, error: verifyError } = await supabase
-        .from("orders")
-        .select("id")
-        .eq("id", orderId)
-        .single();
-
-      if (verifyError && verifyError.code === 'PGRST116') {
-        console.log('✅ Comanda confirmada como excluída do banco');
-      } else if (checkData) {
-        console.log('❌ ERRO: Comanda ainda existe no banco!', checkData);
-        throw new Error('Comanda não foi excluída do banco de dados');
-      }
-
-      // Recarregar a lista de comandas para garantir sincronização
-      console.log('🔄 Recarregando lista de comandas para sincronização...');
-      await fetchOrders();
-      console.log('✅ Lista de comandas recarregada');
+      console.log('✅ Comandas recarregadas');
     } catch (error: unknown) {
       console.error('💥 Erro geral ao excluir comanda:', error);
       
       // Tratamento específico de erros
-      if (error instanceof Error) {
-        if (error.message.includes("network") || error.message.includes("fetch")) {
-          toast({
-            title: "Erro de conexão",
-            description: "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.",
-            variant: "destructive",
-          });
-        } else if (error.message.includes("permission") || error.message.includes("unauthorized") || error.message.includes("RLS")) {
-          toast({
-            title: "Sem permissão",
-            description: "Você não tem permissão para excluir comandas.",
-            variant: "destructive",
-          });
-        } else if (error.message.includes("foreign key") || error.message.includes("violates foreign key")) {
-          toast({
-            title: "Erro ao excluir",
-            description: "Não é possível excluir esta comanda pois há dados relacionados que precisam ser removidos primeiro.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "Erro ao excluir comanda",
-            description: error.message || "Erro desconhecido ao excluir a comanda",
-            variant: "destructive",
-          });
+      let errorMessage = "Erro desconhecido ao excluir a comanda";
+      let errorTitle = "Erro ao excluir comanda";
+      
+      if (error && typeof error === 'object') {
+        const supabaseError = error as any;
+        
+        // Verificar código de erro do Supabase
+        if (supabaseError.code === 'PGRST301' || supabaseError.code === '42501') {
+          errorTitle = "Erro de Permissão";
+          errorMessage = "Você não tem permissão para excluir comandas. Execute o script 'fix-delete-orders.sql' no Supabase SQL Editor para corrigir as políticas RLS.";
+        } else if (supabaseError.code === '23503' || supabaseError.message?.includes("foreign key") || supabaseError.message?.includes("violates foreign key")) {
+          errorTitle = "Erro de Relacionamento";
+          errorMessage = "Não é possível excluir esta comanda pois há dados relacionados que precisam ser removidos primeiro. Tente novamente ou contate o suporte.";
+        } else if (supabaseError.code === 'PGRST116') {
+          errorTitle = "Comanda Não Encontrada";
+          errorMessage = "A comanda não foi encontrada no banco de dados. Ela pode já ter sido excluída.";
+        } else if (supabaseError.message) {
+          errorMessage = supabaseError.message;
+          if (errorMessage.includes("network") || errorMessage.includes("fetch")) {
+            errorTitle = "Erro de Conexão";
+            errorMessage = "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.";
+          } else if (errorMessage.includes("permission") || errorMessage.includes("unauthorized") || errorMessage.includes("RLS") || errorMessage.includes("policy")) {
+            errorTitle = "Erro de Permissão";
+            errorMessage = "Você não tem permissão para excluir comandas. Execute o script 'fix-delete-orders.sql' no Supabase SQL Editor.";
+          }
+        } else if (supabaseError.code) {
+          errorMessage = `Erro ${supabaseError.code}: ${supabaseError.hint || 'Erro ao excluir comanda'}`;
         }
-      } else {
-        toast({
-          title: "Erro ao excluir comanda",
-          description: "Erro desconhecido ao excluir a comanda",
-          variant: "destructive",
-        });
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+        if (errorMessage.includes("network") || errorMessage.includes("fetch")) {
+          errorTitle = "Erro de Conexão";
+          errorMessage = "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.";
+        } else if (errorMessage.includes("permission") || errorMessage.includes("unauthorized") || errorMessage.includes("RLS") || errorMessage.includes("policy")) {
+          errorTitle = "Erro de Permissão";
+          errorMessage = "Você não tem permissão para excluir comandas. Execute o script 'fix-delete-orders.sql' no Supabase SQL Editor.";
+        } else if (errorMessage.includes("foreign key") || errorMessage.includes("violates foreign key")) {
+          errorTitle = "Erro de Relacionamento";
+          errorMessage = "Não é possível excluir esta comanda pois há dados relacionados que precisam ser removidos primeiro.";
+        }
       }
+      
+      toast({
+        title: errorTitle,
+        description: errorMessage,
+        variant: "destructive",
+        duration: 10000, // 10 segundos para permitir leitura completa
+      });
       
       // Recarregar comandas mesmo em caso de erro para garantir estado consistente
       await fetchOrders();

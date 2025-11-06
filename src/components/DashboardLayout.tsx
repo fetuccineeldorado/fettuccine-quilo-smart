@@ -87,23 +87,67 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   }, []);
 
   useEffect(() => {
+    let mounted = true;
+    
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        if (!mounted) return;
         setSession(session);
+        // Só redirecionar se for explicitamente um SIGNED_OUT
         if (!session && event === 'SIGNED_OUT') {
           navigate("/auth");
         }
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (!session) {
-        navigate("/auth");
+    // Verificar sessão com retry em caso de erro temporário
+    const checkSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (!mounted) return;
+        
+        if (error) {
+          console.warn('⚠️ Erro ao verificar sessão:', error);
+          // Se erro, tentar novamente após um delay
+          setTimeout(() => {
+            if (mounted) {
+              checkSession();
+            }
+          }, 1000);
+          return;
+        }
+        
+        setSession(session);
+        if (!session) {
+          // Aguardar um pouco antes de redirecionar (pode ser carregamento lento)
+          setTimeout(async () => {
+            if (mounted) {
+              const { data: { session: retrySession } } = await supabase.auth.getSession();
+              if (!retrySession) {
+                navigate("/auth");
+              }
+            }
+          }, 2000);
+        }
+      } catch (err) {
+        console.error('💥 Erro ao verificar sessão:', err);
+        if (mounted) {
+          // Tentar novamente após erro
+          setTimeout(() => {
+            if (mounted) {
+              checkSession();
+            }
+          }, 2000);
+        }
       }
-    });
+    };
 
-    return () => subscription.unsubscribe();
+    checkSession();
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [navigate]);
 
   const handleLogout = async () => {

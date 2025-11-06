@@ -81,6 +81,7 @@ const EmployeeManagerComplete = () => {
   const [filterRole, setFilterRole] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [tableNotFound, setTableNotFound] = useState(false);
   
   const [formData, setFormData] = useState<EmployeeFormData>({
     name: "",
@@ -177,6 +178,7 @@ const EmployeeManagerComplete = () => {
         } else if (error.code === 'PGRST205' || error.message?.includes('Could not find the table') || error.message?.includes('does not exist')) {
           const errorMsg = "A tabela 'employees' não foi encontrada. Execute o script 'criar_tabelas_funcionarios_completo.sql' no Supabase SQL Editor.";
           console.error("📋 Tabela não encontrada:", errorMsg);
+          setTableNotFound(true);
           throw new Error(errorMsg);
         } else if (error.code === 'PGRST116') {
           // Tabela existe mas não há dados - não é um erro
@@ -194,6 +196,7 @@ const EmployeeManagerComplete = () => {
 
       console.log("✅ Funcionários carregados com sucesso:", data?.length || 0, "registros");
       setEmployees(data || []);
+      setTableNotFound(false); // Resetar flag se carregou com sucesso
     } catch (error) {
       console.error("❌ Erro ao carregar funcionários:", error);
       
@@ -212,7 +215,8 @@ const EmployeeManagerComplete = () => {
           errorMessage = "Você não tem permissão para visualizar funcionários. Execute o script 'fix_employees_rls_rapido.sql' no Supabase SQL Editor.";
         } else if (error.message.includes("table") || error.message.includes("não foi encontrada")) {
           errorTitle = "Tabela Não Encontrada";
-          errorMessage = "A tabela 'employees' não existe. Execute o script 'criar_tabelas_funcionarios_completo.sql' no Supabase SQL Editor.";
+          errorMessage = "A tabela 'employees' não existe no banco de dados.\n\n📋 SOLUÇÃO RÁPIDA:\n1. Acesse: https://supabase.com/dashboard\n2. Abra o SQL Editor\n3. Execute o script: CRIAR_TABELA_EMPLOYEES_SIMPLES.sql\n4. Recarregue esta página (F5)\n\n📁 Arquivo: CRIAR_TABELA_EMPLOYEES_SIMPLES.sql";
+          setTableNotFound(true);
         }
       } else if (typeof error === 'object' && error !== null) {
         const supabaseError = error as any;
@@ -1004,20 +1008,57 @@ const EmployeeManagerComplete = () => {
       ) : employees.length === 0 && !loading ? (
         <Card>
           <CardContent className="p-8 text-center space-y-4">
-            <User className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">
-              {searchTerm || filterRole !== "all" || filterStatus !== "all"
-                ? "Nenhum funcionário encontrado com os filtros aplicados"
-                : "Nenhum funcionário cadastrado ainda"}
-            </p>
-            <Button 
-              variant="outline" 
-              onClick={loadEmployees}
-              className="mt-4"
-            >
-              <Search className="h-4 w-4 mr-2" />
-              Tentar Carregar Novamente
-            </Button>
+            {tableNotFound ? (
+              <>
+                <AlertTriangle className="h-16 w-16 mx-auto text-destructive mb-4" />
+                <h3 className="text-xl font-semibold mb-2">Tabela Não Encontrada</h3>
+                <p className="text-muted-foreground mb-4">
+                  A tabela <code className="bg-muted px-2 py-1 rounded">employees</code> não existe no banco de dados.
+                </p>
+                <div className="bg-muted/50 border rounded-lg p-6 text-left max-w-2xl mx-auto space-y-3">
+                  <h4 className="font-semibold flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    Solução Rápida:
+                  </h4>
+                  <ol className="list-decimal list-inside space-y-2 text-sm">
+                    <li>Acesse <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">https://supabase.com/dashboard</a></li>
+                    <li>Abra o <strong>SQL Editor</strong> no menu lateral</li>
+                    <li>Clique em <strong>"New query"</strong></li>
+                    <li>Execute o script: <code className="bg-background px-2 py-1 rounded">CRIAR_TABELA_EMPLOYEES_SIMPLES.sql</code></li>
+                    <li>Recarregue esta página (F5)</li>
+                  </ol>
+                  <div className="mt-4 pt-4 border-t">
+                    <p className="text-xs text-muted-foreground">
+                      <strong>Arquivo:</strong> <code className="bg-background px-2 py-1 rounded text-xs">CRIAR_TABELA_EMPLOYEES_SIMPLES.sql</code>
+                    </p>
+                  </div>
+                </div>
+                <Button 
+                  onClick={loadEmployees}
+                  className="mt-6"
+                >
+                  <Search className="h-4 w-4 mr-2" />
+                  Verificar Novamente
+                </Button>
+              </>
+            ) : (
+              <>
+                <User className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">
+                  {searchTerm || filterRole !== "all" || filterStatus !== "all"
+                    ? "Nenhum funcionário encontrado com os filtros aplicados"
+                    : "Nenhum funcionário cadastrado ainda"}
+                </p>
+                <Button 
+                  variant="outline" 
+                  onClick={loadEmployees}
+                  className="mt-4"
+                >
+                  <Search className="h-4 w-4 mr-2" />
+                  Tentar Carregar Novamente
+                </Button>
+              </>
+            )}
           </CardContent>
         </Card>
       ) : filteredEmployees.length === 0 ? (

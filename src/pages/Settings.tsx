@@ -10,6 +10,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import WhatsAppQRCode from "@/components/WhatsAppQRCode";
 import { Settings as SettingsIcon, Save, MessageCircle } from "lucide-react";
 import { clearSettingsCache } from "@/utils/settingsCache";
+import { autoFixPricePerKg, ensureSystemSettings } from "@/utils/autoFix";
 
 const Settings = () => {
   const { toast } = useToast();
@@ -26,6 +27,12 @@ const Settings = () => {
 
   const fetchSettings = async () => {
     try {
+      // Primeiro, garantir que as configurações existam (auto-fix)
+      const ensureResult = await ensureSystemSettings();
+      if (!ensureResult.success && ensureResult.message.includes('Erro')) {
+        console.warn('⚠️ Auto-fix não conseguiu criar configurações:', ensureResult.message);
+      }
+
       const { data, error } = await supabase
         .from("system_settings")
         .select("*")
@@ -34,6 +41,38 @@ const Settings = () => {
 
       if (error) {
         console.error('Erro ao carregar configurações:', error);
+        // Tentar auto-recuperar
+        const autoFixResult = await ensureSystemSettings();
+        if (autoFixResult.success) {
+          // Tentar novamente após auto-fix
+          const { data: retryData, error: retryError } = await supabase
+            .from("system_settings")
+            .select("*")
+            .limit(1)
+            .maybeSingle();
+          
+          if (retryError || !retryData) {
+            toast({
+              title: "Erro ao carregar configurações",
+              description: error.message,
+              variant: "destructive",
+            });
+            return;
+          }
+          
+          // Usar dados após auto-fix
+          const pricePerKg = retryData.price_per_kg ? Number(retryData.price_per_kg) : 59.90;
+          const minimumCharge = retryData.minimum_charge ? Number(retryData.minimum_charge) : 5.00;
+          const maximumWeight = retryData.maximum_weight ? Number(retryData.maximum_weight) : 2.00;
+          
+          setSettings({
+            pricePerKg: pricePerKg.toFixed(2),
+            minimumCharge: minimumCharge.toFixed(2),
+            maximumWeight: maximumWeight.toFixed(2),
+          });
+          return;
+        }
+        
         toast({
           title: "Erro ao carregar configurações",
           description: error.message,
@@ -42,47 +81,44 @@ const Settings = () => {
         return;
       }
 
-      // Se não houver configurações, criar com valores padrão
+      // Se não houver configurações, criar com valores padrão (auto-fix)
       if (!data) {
-        const { data: { session } } = await supabase.auth.getSession();
-        const defaultSettings = {
-          price_per_kg: 59.90,
-          minimum_charge: 5.00,
-          maximum_weight: 2.00,
-          updated_by: session?.user?.id || null,
-        };
-
-        const { data: newSettings, error: createError } = await supabase
-          .from("system_settings")
-          .insert([defaultSettings])
-          .select()
-          .single();
-
-        if (createError) {
-          console.error('Erro ao criar configurações padrão:', createError);
-          toast({
-            title: "Erro ao inicializar configurações",
-            description: "Não foi possível criar configurações padrão. Tente novamente.",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        if (newSettings) {
-          setSettings({
-            pricePerKg: Number(newSettings.price_per_kg).toFixed(2),
-            minimumCharge: Number(newSettings.minimum_charge).toFixed(2),
-            maximumWeight: Number(newSettings.maximum_weight).toFixed(2),
-          });
+        const fixResult = await ensureSystemSettings();
+        if (fixResult.success) {
+          // Recarregar após criar
+          const { data: newData } = await supabase
+            .from("system_settings")
+            .select("*")
+            .limit(1)
+            .maybeSingle();
+          
+          if (newData) {
+            setSettings({
+              pricePerKg: Number(newData.price_per_kg || 59.90).toFixed(2),
+              minimumCharge: Number(newData.minimum_charge || 5.00).toFixed(2),
+              maximumWeight: Number(newData.maximum_weight || 2.00).toFixed(2),
+            });
+          }
         }
         return;
       }
 
       // Se houver configurações, usar os valores
+      // Forçar recálculo do valor para garantir precisão
+      const pricePerKg = data.price_per_kg ? Number(data.price_per_kg) : 59.90;
+      const minimumCharge = data.minimum_charge ? Number(data.minimum_charge) : 5.00;
+      const maximumWeight = data.maximum_weight ? Number(data.maximum_weight) : 2.00;
+      
+      console.log('📊 Configurações carregadas do banco:', {
+        price_per_kg: pricePerKg,
+        minimum_charge: minimumCharge,
+        maximum_weight: maximumWeight
+      });
+      
       setSettings({
-        pricePerKg: Number(data.price_per_kg || 59.90).toFixed(2),
-        minimumCharge: Number(data.minimum_charge || 5.00).toFixed(2),
-        maximumWeight: Number(data.maximum_weight || 2.00).toFixed(2),
+        pricePerKg: pricePerKg.toFixed(2),
+        minimumCharge: minimumCharge.toFixed(2),
+        maximumWeight: maximumWeight.toFixed(2),
       });
     } catch (err) {
       console.error('Erro geral ao carregar configurações:', err);
@@ -221,7 +257,14 @@ const Settings = () => {
       }
 
       // Atualizar as configurações
-      const { error } = await supabase
+      console.log('💾 Salvando configurações:', {
+        price_per_kg: pricePerKgNum,
+        minimum_charge: minimumChargeNum,
+        maximum_weight: maximumWeightNum,
+        id: currentSettings.id
+      });
+      
+      const { data: updatedData, error } = await supabase
         .from("system_settings")
         .update({
           price_per_kg: pricePerKgNum,
@@ -229,18 +272,198 @@ const Settings = () => {
           maximum_weight: maximumWeightNum,
           updated_by: session.user.id,
         })
-        .eq("id", currentSettings.id);
+        .eq("id", currentSettings.id)
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Erro ao atualizar configurações:', error);
+        
+        // Se for erro de permissão RLS, mostrar instruções e não tentar fallback
+        if (error.code === 'PGRST301' || error.code === '42501' || error.message?.includes('permission') || error.message?.includes('policy') || error.message?.includes('403')) {
+          console.error('');
+          console.error('═══════════════════════════════════════════════════════════');
+          console.error('🚨 ERRO DE PERMISSÃO RLS DETECTADO');
+          console.error('═══════════════════════════════════════════════════════════');
+          console.error('');
+          console.error('📋 SOLUÇÃO RÁPIDA (2 minutos):');
+          console.error('');
+          console.error('1. Acesse: https://supabase.com/dashboard');
+          console.error('2. Selecione seu projeto');
+          console.error('3. No menu lateral, clique em "SQL Editor"');
+          console.error('4. Copie todo o conteúdo do arquivo: fix-system-settings-rls.sql');
+          console.error('5. Cole no editor SQL e clique em RUN (ou Ctrl+Enter)');
+          console.error('');
+          console.error('📄 Arquivos disponíveis:');
+          console.error('   - fix-system-settings-rls.sql (correção específica)');
+          console.error('   - CORRIGIR_TUDO_SQL_COMPLETO.sql (correção completa)');
+          console.error('');
+          console.error('✅ Após executar o script, recarregue esta página (F5)');
+          console.error('');
+          console.error('═══════════════════════════════════════════════════════════');
+          console.error('');
+          
+          toast({
+            title: "⚠️ Permissão negada - Ação necessária",
+            description: "As políticas de segurança precisam ser atualizadas. Veja as instruções detalhadas no console do navegador (F12).",
+            variant: "destructive",
+            duration: 15000,
+          });
+          
+          setLoading(false);
+          throw new Error(`Permissão RLS negada. Execute o script SQL 'fix-system-settings-rls.sql' no Supabase SQL Editor. Veja instruções completas no console acima.`);
+        }
+        
+        throw error;
+      }
+
+       // Verificar se alguma linha foi atualizada
+       if (!updatedData || updatedData.length === 0) {
+         console.warn('⚠️ Nenhuma linha foi atualizada. Pode ser problema de permissão RLS.');
+         
+         // Mostrar aviso antes de tentar fallback
+         console.error('');
+         console.error('═══════════════════════════════════════════════════════════');
+         console.error('⚠️ ATUALIZAÇÃO FALHOU - NENHUMA LINHA ATUALIZADA');
+         console.error('═══════════════════════════════════════════════════════════');
+         console.error('');
+         console.error('📋 Isso geralmente indica problema de permissão RLS.');
+         console.error('   Tentando criar nova configuração como fallback...');
+         console.error('');
+         
+         // Tentar criar uma nova configuração como fallback
+         const { data: newSettings, error: createError } = await supabase
+           .from("system_settings")
+           .insert([{
+             price_per_kg: pricePerKgNum,
+             minimum_charge: minimumChargeNum,
+             maximum_weight: maximumWeightNum,
+             updated_by: session.user.id,
+           }])
+           .select()
+           .single();
+         
+         if (createError) {
+           // Erro específico de permissão RLS
+           if (createError.code === 'PGRST301' || createError.message?.includes('permission') || createError.message?.includes('policy') || createError.message?.includes('403') || createError.code === '42501') {
+             console.error('❌ Erro de permissão RLS detectado:', createError);
+             
+             // Mostrar mensagem detalhada com instruções
+             toast({
+               title: "⚠️ Permissão negada - Ação necessária",
+               description: "As políticas de segurança precisam ser atualizadas. Veja as instruções detalhadas no console do navegador (F12).",
+               variant: "destructive",
+               duration: 15000,
+             });
+             
+             // Log detalhado no console com instruções
+             console.error('');
+             console.error('═══════════════════════════════════════════════════════════');
+             console.error('🚨 ERRO DE PERMISSÃO RLS DETECTADO');
+             console.error('═══════════════════════════════════════════════════════════');
+             console.error('');
+             console.error('📋 SOLUÇÃO RÁPIDA (2 minutos):');
+             console.error('');
+             console.error('1. Acesse: https://supabase.com/dashboard');
+             console.error('2. Selecione seu projeto');
+             console.error('3. No menu lateral, clique em "SQL Editor"');
+             console.error('4. Copie todo o conteúdo do arquivo: fix-system-settings-rls.sql');
+             console.error('5. Cole no editor SQL e clique em RUN (ou Ctrl+Enter)');
+             console.error('');
+             console.error('📄 Arquivos disponíveis:');
+             console.error('   - fix-system-settings-rls.sql (correção específica)');
+             console.error('   - CORRIGIR_TUDO_SQL_COMPLETO.sql (correção completa)');
+             console.error('');
+             console.error('✅ Após executar o script, recarregue esta página (F5)');
+             console.error('');
+             console.error('═══════════════════════════════════════════════════════════');
+             console.error('');
+             
+             setLoading(false);
+             throw new Error(`Permissão RLS negada. Execute o script SQL 'fix-system-settings-rls.sql' no Supabase SQL Editor. Veja instruções completas no console acima.`);
+           }
+           throw new Error(`Erro ao atualizar configurações: Nenhuma linha foi atualizada e não foi possível criar nova configuração. ${createError.message}`);
+         }
+        
+        // Configuração criada com sucesso
+        clearSettingsCache();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('settingsUpdated', {
+            detail: {
+              price_per_kg: pricePerKgNum,
+              minimum_charge: minimumChargeNum,
+              maximum_weight: maximumWeightNum,
+            }
+          }));
+        }
+        
+        toast({
+          title: "Configurações salvas!",
+          description: `Preço por kg definido para R$ ${pricePerKgNum.toFixed(2)}.`,
+        });
+        
+        setSettings({
+          pricePerKg: pricePerKgNum.toFixed(2),
+          minimumCharge: minimumChargeNum.toFixed(2),
+          maximumWeight: maximumWeightNum.toFixed(2),
+        });
+        
+        setLoading(false);
+        await fetchSettings();
+        return;
+      }
+
+      console.log('✅ Configurações atualizadas no banco:', updatedData[0]);
+
+      // Limpar cache IMEDIATAMENTE
+      clearSettingsCache();
+      
+      // Atualizar o estado local IMEDIATAMENTE com os valores salvos
+      setSettings({
+        pricePerKg: pricePerKgNum.toFixed(2),
+        minimumCharge: minimumChargeNum.toFixed(2),
+        maximumWeight: maximumWeightNum.toFixed(2),
+      });
+      
+      console.log('✅ Estado local atualizado:', {
+        pricePerKg: pricePerKgNum.toFixed(2),
+        minimumCharge: minimumChargeNum.toFixed(2),
+        maximumWeight: maximumWeightNum.toFixed(2),
+      });
+      
+      // Verificar se temos dados atualizados válidos
+      if (updatedData && updatedData.length > 0) {
+        console.log('✅ Configurações atualizadas:', updatedData[0]);
+      }
+
+      // Limpar cache IMEDIATAMENTE e forçar atualização
+      clearSettingsCache();
+      
+      // Forçar atualização de todos os componentes que usam essas configurações
+      // Disparar evento customizado para notificar outros componentes
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('settingsUpdated', {
+          detail: {
+            price_per_kg: pricePerKgNum,
+            minimum_charge: minimumChargeNum,
+            maximum_weight: maximumWeightNum,
+          }
+        }));
+      }
 
       toast({
         title: "Configurações salvas!",
-        description: "As alterações foram aplicadas com sucesso",
+        description: `Preço por kg atualizado para R$ ${pricePerKgNum.toFixed(2)}. Recarregando...`,
       });
 
-      // Limpar cache e recarregar as configurações para confirmar
-      clearSettingsCache();
+      // Recarregar as configurações do banco para confirmar
       await fetchSettings();
+      
+      // Forçar atualização visual imediata
+      setSettings({
+        pricePerKg: pricePerKgNum.toFixed(2),
+        minimumCharge: minimumChargeNum.toFixed(2),
+        maximumWeight: maximumWeightNum.toFixed(2),
+      });
     } catch (error: unknown) {
       console.error('Erro ao salvar configurações:', error);
 

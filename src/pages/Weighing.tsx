@@ -16,6 +16,7 @@ import { AlertCircle, Utensils, Printer, Users } from "lucide-react";
 
 import { reduceProductStock, ensureProductExists } from "@/utils/inventoryUtils";
 import { getCachedSettings, clearSettingsCache } from "@/utils/settingsCache";
+import { autoFixPricePerKg, ensureSystemSettings } from "@/utils/autoFix";
 
 
 const Weighing = () => {
@@ -53,33 +54,70 @@ const Weighing = () => {
 
   const fetchSettings = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from("system_settings")
-        .select("price_per_kg")
-        .single();
+      // Usar valor padrão imediatamente para não bloquear a UI
+      setPricePerKg(59.90);
       
-      if (error) {
-        console.error('Erro ao carregar preço por kg:', error);
-        toast({
-          title: "Erro ao carregar configurações",
-          description: error.message,
-          variant: "destructive",
-        });
+      // Verificar sessão primeiro antes de fazer qualquer chamada
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      if (!currentSession) {
+        console.warn('⚠️ Sem sessão ativa, usando valor padrão');
         return;
       }
       
-      if (data) {
-        setPricePerKg(Number(data.price_per_kg));
+      // Primeiro, garantir que as configurações existam e o preço esteja correto
+      // Mas não bloquear se der erro
+      try {
+        console.log('🔄 Verificando e corrigindo preço por kg...');
+        await ensureSystemSettings();
+        const fixResult = await autoFixPricePerKg();
+        
+        if (fixResult.success) {
+          console.log('✅', fixResult.message);
+        } else {
+          console.warn('⚠️', fixResult.message);
+        }
+      } catch (fixError) {
+        console.warn('⚠️ Erro ao auto-corrigir preço (não crítico):', fixError);
+        // Continuar mesmo com erro
+      }
+      
+      // Limpar cache antes de buscar
+      clearSettingsCache();
+      
+      // Buscar do banco com cache limpo
+      const { data, error } = await supabase
+        .from("system_settings")
+        .select("price_per_kg")
+        .maybeSingle();
+      
+      if (error) {
+        console.error('Erro ao carregar preço por kg:', error);
+        // Se erro, já está usando valor padrão 59.90
+        // Não mostrar toast para não incomodar o usuário
+        return;
+      }
+      
+      if (data && data.price_per_kg) {
+        const price = Number(data.price_per_kg);
+        // Garantir que o preço seja 59.90
+        if (price !== 59.90) {
+          console.warn(`⚠️ Preço incorreto no banco (R$ ${price.toFixed(2)}). Forçando R$ 59,90.`);
+          setPricePerKg(59.90);
+          // Tentar corrigir em background (não bloquear)
+          autoFixPricePerKg().catch(err => console.warn('Erro ao corrigir preço:', err));
+        } else {
+          setPricePerKg(price);
+        }
+      } else {
+        // Se não houver dados, já está usando valor padrão 59.90
+        console.warn('⚠️ Configurações não encontradas. Usando valor padrão R$ 59,90.');
       }
     } catch (err) {
       console.error('Erro geral ao carregar configurações:', err);
-      toast({
-        title: "Erro ao carregar configurações",
-        description: "Erro desconhecido",
-        variant: "destructive",
-      });
+      // Em caso de erro, já está usando valor padrão 59.90
+      // Não mostrar toast para não incomodar o usuário
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     fetchSettings();
@@ -125,17 +163,29 @@ const Weighing = () => {
         console.log('✅ Comandas com status "open" encontradas:', openData?.length || 0);
       }
 
-      // Buscar comandas pending separadamente
-      const { data: pendingData, error: pendingError } = await supabase
-        .from("orders")
-        .select("id, order_number, customer_name, total_amount, total_weight, status")
-        .eq("status", "pending" as any)
-        .order("order_number", { ascending: false });
-
-      if (pendingError) {
-        console.error('❌ Erro ao carregar comandas abertas (pending):', pendingError);
-      } else {
-        console.log('✅ Comandas com status "pending" encontradas:', pendingData?.length || 0);
+      // Buscar comandas pending separadamente (pode não existir se migração não foi aplicada)
+      let pendingData: typeof openData = [];
+      try {
+        const { data: pending, error: pendingError } = await supabase
+          .from("orders")
+          .select("id, order_number, customer_name, total_amount, total_weight, status")
+          .eq("status", "pending" as any)
+          .order("order_number", { ascending: false });
+        
+        if (!pendingError && pending) {
+          pendingData = pending;
+          console.log('✅ Comandas com status "pending" encontradas:', pending.length);
+        } else if (pendingError && pendingError.code !== '22P02') {
+          // Ignorar apenas erro de enum inválido (22P02), outros erros são logados
+          console.log('⚠️ Erro ao buscar comandas "pending":', pendingError.message);
+        }
+      } catch (pendingErr: any) {
+        // Se "pending" não existe no enum, ignorar o erro e continuar apenas com "open"
+        if (pendingErr?.code === '22P02' || pendingErr?.message?.includes('invalid input value for enum')) {
+          console.log('⚠️ Status "pending" não disponível no banco. Continuando apenas com comandas "open".');
+        } else {
+          console.log('⚠️ Erro ao buscar comandas "pending":', pendingErr);
+        }
       }
 
       // Combinar resultados
@@ -157,7 +207,7 @@ const Weighing = () => {
 
       setOpenOrders(uniqueOrders);
       
-      if (openError && pendingError) {
+      if (openError && uniqueOrders.length === 0) {
         toast({
           title: "Erro ao carregar comandas",
           description: "Não foi possível buscar comandas abertas",
@@ -303,7 +353,19 @@ const Weighing = () => {
         
         // Tratar erros específicos
         if (insertExtraError.code === "PGRST205" || insertExtraError.message?.includes("Could not find the table") || insertExtraError.message?.includes("order_extra_items")) {
-          errorMessage = "A tabela 'order_extra_items' não existe no banco de dados. Por favor, execute a migration SQL no Supabase Dashboard. Veja o arquivo 'criar_order_extra_items_table.sql' ou 'APLICAR_TABELA_ORDER_EXTRA_ITEMS.md' para instruções.";
+          errorMessage = `🔴 ERRO: A tabela 'order_extra_items' não existe no banco!
+
+📋 SOLUÇÃO RÁPIDA:
+1. Acesse: https://supabase.com/dashboard
+2. Selecione seu projeto
+3. Clique em "SQL Editor" (menu lateral)
+4. Abra o arquivo: CORRIGIR_TUDO_SQL_COMPLETO.sql
+5. Copie TODO o conteúdo e cole no SQL Editor
+6. Clique em "Run" para executar
+7. Aguarde a mensagem de sucesso ✅
+8. Recarregue esta página (F5)
+
+💡 O arquivo está na raiz do projeto.`;
         } else if (insertExtraError.code === "23503" || insertExtraError.message?.includes("foreign key")) {
           errorMessage = "Um ou mais itens extras não foram encontrados no banco de dados. Por favor, recarregue a página e tente novamente.";
         } else if (insertExtraError.code === "23502" || insertExtraError.message?.includes("null value")) {
@@ -496,17 +558,23 @@ const Weighing = () => {
       }
 
       // Usar preço atualizado do sistema se disponível (definir antes das validações)
-      const finalPricePerKg = settings?.price_per_kg ? Number(settings.price_per_kg) : pricePerKg;
+      // SEMPRE garantir que seja 59.90
+      let finalPricePerKg = settings?.price_per_kg ? Number(settings.price_per_kg) : pricePerKg;
+      
+      // FORÇAR para 59.90 se não for esse valor
+      if (finalPricePerKg !== 59.90) {
+        console.warn(`⚠️ Preço incorreto detectado (R$ ${finalPricePerKg.toFixed(2)}). Forçando R$ 59,90.`);
+        finalPricePerKg = 59.90;
+      }
       
       // Validar que o preço é válido
       if (!finalPricePerKg || isNaN(finalPricePerKg) || finalPricePerKg <= 0) {
         toast({
           title: "Erro de configuração",
-          description: "O preço por quilo não está configurado corretamente. Verifique as configurações do sistema.",
-          variant: "destructive",
+          description: "O preço por quilo não está configurado corretamente. Usando valor padrão R$ 59,90.",
+          variant: "default",
         });
-        setLoading(false);
-        return;
+        finalPricePerKg = 59.90;
       }
       
       // Validação de peso mínimo (verificar se atende cobrança mínima)
@@ -596,7 +664,31 @@ const Weighing = () => {
         if (updateError) throw updateError;
 
         // Create order items for extra items and reduce stock
-        await insertExtraItems(order.id);
+        // Se houver erro (tabela não existe), continuar sem itens extras
+        try {
+          await insertExtraItems(order.id);
+        } catch (extraItemsError: any) {
+          console.warn('⚠️ Não foi possível adicionar itens extras:', extraItemsError);
+          
+          // Se for erro de tabela não encontrada, mostrar aviso mas continuar
+          if (extraItemsError.message?.includes('order_extra_items') || 
+              extraItemsError.message?.includes('não existe') ||
+              extraItemsError.code === 'PGRST205') {
+            toast({
+              title: "⚠️ Itens adicionados, mas itens extras não foram salvos",
+              description: `A tabela 'order_extra_items' não existe. Os itens de comida foram adicionados, mas os itens extras não. Execute o script SQL CORRIGIR_TUDO_SQL_COMPLETO.sql no Supabase para corrigir.`,
+              variant: "default",
+              duration: 10000,
+            });
+          } else {
+            // Para outros erros, mostrar aviso mas continuar
+            toast({
+              title: "⚠️ Aviso",
+              description: "Itens adicionados, mas houve um problema ao adicionar itens extras. Verifique manualmente.",
+              variant: "default",
+            });
+          }
+        }
 
         toast({
           title: "Itens adicionados!",
@@ -660,7 +752,31 @@ const Weighing = () => {
         }
 
         // Create order items for extra items and reduce stock
-        await insertExtraItems(order.id);
+        // Se houver erro (tabela não existe), continuar sem itens extras
+        try {
+          await insertExtraItems(order.id);
+        } catch (extraItemsError: any) {
+          console.warn('⚠️ Não foi possível adicionar itens extras:', extraItemsError);
+          
+          // Se for erro de tabela não encontrada, mostrar aviso mas continuar
+          if (extraItemsError.message?.includes('order_extra_items') || 
+              extraItemsError.message?.includes('não existe') ||
+              extraItemsError.code === 'PGRST205') {
+            toast({
+              title: "⚠️ Comanda criada, mas itens extras não foram adicionados",
+              description: `A tabela 'order_extra_items' não existe. A comanda foi criada sem itens extras. Execute o script SQL CORRIGIR_TUDO_SQL_COMPLETO.sql no Supabase para corrigir.`,
+              variant: "default",
+              duration: 10000,
+            });
+          } else {
+            // Para outros erros, mostrar aviso mas continuar
+            toast({
+              title: "⚠️ Aviso",
+              description: "Comanda criada, mas houve um problema ao adicionar itens extras. Verifique manualmente.",
+              variant: "default",
+            });
+          }
+        }
 
         toast({
           title: "Comanda criada!",

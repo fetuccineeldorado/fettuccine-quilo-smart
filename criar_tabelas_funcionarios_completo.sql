@@ -343,22 +343,26 @@ DROP POLICY IF EXISTS "Admins can manage employees" ON employees;
 DROP POLICY IF EXISTS "Employees can view own data" ON employees;
 
 -- Criar políticas permissivas para usuários autenticados
+DROP POLICY IF EXISTS "Authenticated users can view employees" ON employees;
 CREATE POLICY "Authenticated users can view employees"
   ON employees FOR SELECT
   TO authenticated
   USING (true);
 
+DROP POLICY IF EXISTS "Authenticated users can create employees" ON employees;
 CREATE POLICY "Authenticated users can create employees"
   ON employees FOR INSERT
   TO authenticated
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Authenticated users can update employees" ON employees;
 CREATE POLICY "Authenticated users can update employees"
   ON employees FOR UPDATE
   TO authenticated
   USING (true)
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Authenticated users can delete employees" ON employees;
 CREATE POLICY "Authenticated users can delete employees"
   ON employees FOR DELETE
   TO authenticated
@@ -395,6 +399,7 @@ DROP POLICY IF EXISTS "Authenticated users can manage time clock" ON time_clock;
 DROP POLICY IF EXISTS "Admins can manage time clock" ON time_clock;
 
 -- Usuários autenticados podem ver seus próprios registros ou todos (se admin)
+DROP POLICY IF EXISTS "Authenticated users can view time clock" ON time_clock;
 CREATE POLICY "Authenticated users can view time clock"
   ON time_clock FOR SELECT
   TO authenticated
@@ -406,6 +411,7 @@ CREATE POLICY "Authenticated users can view time clock"
   );
 
 -- Usuários autenticados podem criar registros de ponto
+DROP POLICY IF EXISTS "Authenticated users can create time clock" ON time_clock;
 CREATE POLICY "Authenticated users can create time clock"
   ON time_clock FOR INSERT
   TO authenticated
@@ -417,6 +423,7 @@ CREATE POLICY "Authenticated users can create time clock"
   );
 
 -- Usuários autenticados podem atualizar registros
+DROP POLICY IF EXISTS "Authenticated users can update time clock" ON time_clock;
 CREATE POLICY "Authenticated users can update time clock"
   ON time_clock FOR UPDATE
   TO authenticated
@@ -424,6 +431,7 @@ CREATE POLICY "Authenticated users can update time clock"
   WITH CHECK (true);
 
 -- Usuários autenticados podem deletar registros
+DROP POLICY IF EXISTS "Authenticated users can delete time clock" ON time_clock;
 CREATE POLICY "Authenticated users can delete time clock"
   ON time_clock FOR DELETE
   TO authenticated
@@ -439,12 +447,14 @@ DROP POLICY IF EXISTS "Authenticated users can view failed attempts" ON failed_a
 DROP POLICY IF EXISTS "Authenticated users can create failed attempts" ON failed_attempts;
 
 -- Todos os usuários autenticados podem visualizar tentativas falhas
+DROP POLICY IF EXISTS "Authenticated users can view failed attempts" ON failed_attempts;
 CREATE POLICY "Authenticated users can view failed attempts"
   ON failed_attempts FOR SELECT
   TO authenticated
   USING (true);
 
 -- Todos os usuários autenticados podem criar tentativas falhas
+DROP POLICY IF EXISTS "Authenticated users can create failed attempts" ON failed_attempts;
 CREATE POLICY "Authenticated users can create failed attempts"
   ON failed_attempts FOR INSERT
   TO authenticated

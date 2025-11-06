@@ -179,20 +179,78 @@ const EditOrder = () => {
 
   const fetchSystemSettings = async () => {
     try {
+      // Garantir que as configurações existam e o preço esteja correto
+      const { autoFixPricePerKg, ensureSystemSettings } = await import("@/utils/autoFix");
+      await ensureSystemSettings();
+      const fixResult = await autoFixPricePerKg();
+      
+      if (fixResult.success) {
+        console.log('✅', fixResult.message);
+      } else {
+        console.warn('⚠️', fixResult.message);
+      }
+      
+      // Limpar cache antes de buscar
+      const { clearSettingsCache } = await import("@/utils/settingsCache");
+      clearSettingsCache();
+      
       const { data, error } = await supabase
         .from("system_settings")
         .select("price_per_kg")
-        .order("updated_at", { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
-      if (data) {
-        setPricePerKg(Number(data.price_per_kg));
+      if (error) {
+        console.error("Erro ao carregar configurações:", error);
+        // Usar valor padrão 59.90 em caso de erro
+        setPricePerKg(59.90);
+        return;
+      }
+
+      if (data && data.price_per_kg) {
+        const price = Number(data.price_per_kg);
+        // FORÇAR para 59.90 se não for esse valor
+        if (price !== 59.90) {
+          console.warn(`⚠️ Preço incorreto no banco (R$ ${price.toFixed(2)}). Forçando R$ 59,90.`);
+          setPricePerKg(59.90);
+          // Tentar corrigir novamente
+          await autoFixPricePerKg();
+        } else {
+          setPricePerKg(price);
+        }
+      } else {
+        setPricePerKg(59.90); // Valor padrão
       }
     } catch (error) {
       console.error("Erro ao carregar configurações:", error);
+      // Usar valor padrão em caso de erro
+      setPricePerKg(59.90);
     }
   };
+
+  // Listener para atualizações de configurações em tempo real
+  useEffect(() => {
+    const handleSettingsUpdate = (event: CustomEvent) => {
+      const settings = event.detail;
+      if (settings?.price_per_kg) {
+        const price = Number(settings.price_per_kg);
+        console.log('🔄 Configurações atualizadas em EditOrder, atualizando preço...');
+        // FORÇAR para 59.90 se não for esse valor
+        if (price !== 59.90) {
+          console.warn(`⚠️ Preço incorreto recebido (R$ ${price.toFixed(2)}). Forçando R$ 59,90.`);
+          setPricePerKg(59.90);
+        } else {
+          setPricePerKg(price);
+        }
+      }
+    };
+
+    window.addEventListener('settingsUpdated', handleSettingsUpdate as EventListener);
+    
+    return () => {
+      window.removeEventListener('settingsUpdated', handleSettingsUpdate as EventListener);
+    };
+  }, []);
 
   const addFoodItem = async () => {
     if (!newWeight || Number(newWeight) <= 0) {

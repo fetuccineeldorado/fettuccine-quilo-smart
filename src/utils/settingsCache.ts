@@ -11,7 +11,7 @@ interface SystemSettings {
 
 let settingsCache: SystemSettings | null = null;
 let cacheTimestamp: number = 0;
-const CACHE_DURATION = 60000; // 1 minuto
+const CACHE_DURATION = 30000; // 30 segundos (reduzido para atualizações mais rápidas)
 
 /**
  * Limpa o cache de configurações
@@ -20,6 +20,17 @@ export function clearSettingsCache() {
   console.log('🗑️ Limpando cache de configurações...');
   settingsCache = null;
   cacheTimestamp = 0;
+  
+  // Também limpar do localStorage se existir
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('settings_cache');
+      localStorage.removeItem('price_per_kg');
+    }
+  } catch (e) {
+    // Ignorar erros de localStorage
+  }
+  
   console.log('✅ Cache de configurações limpo');
 }
 

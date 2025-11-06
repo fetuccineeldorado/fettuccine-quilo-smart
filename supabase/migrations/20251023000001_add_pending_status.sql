@@ -1,5 +1,15 @@
--- Add pending status to order_status enum
-ALTER TYPE order_status ADD VALUE 'pending';
+-- Add pending status to order_status enum (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 
+    FROM pg_enum 
+    WHERE enumlabel = 'pending' 
+    AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'order_status')
+  ) THEN
+    ALTER TYPE order_status ADD VALUE 'pending';
+  END IF;
+END $$;
 
 -- Add updated_at column to orders table if it doesn't exist
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
