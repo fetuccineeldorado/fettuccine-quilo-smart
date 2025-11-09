@@ -118,3 +118,6 @@ Se após executar o script ainda aparecer R$ 45,00:
 
 
 
+
+
+

@@ -74,3 +74,6 @@ Para verificar se a tabela foi criada:
 3. Se aparecer, a tabela foi criada com sucesso! ✅
 
 
+
+
+

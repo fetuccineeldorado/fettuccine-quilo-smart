@@ -1,14 +1,14 @@
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useState, memo } from "react";
 import { useNavigate, NavLink, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { 
-  LayoutDashboard, 
-  Scale, 
-  FileText, 
-  CreditCard, 
-  BarChart3, 
+import {
+  LayoutDashboard,
+  Scale,
+  FileText,
+  CreditCard,
+  BarChart3,
   Settings,
   Package,
   Users,
@@ -31,7 +31,7 @@ interface DashboardLayoutProps {
   children: ReactNode;
 }
 
-const DashboardLayout = ({ children }: DashboardLayoutProps) => {
+const DashboardLayout = memo(({ children }: DashboardLayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
@@ -179,7 +179,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   }
 
   return (
-    <div 
+    <div
       className="min-h-screen bg-background flex flex-col lg:flex-row"
       {...swipeGestures}
     >
@@ -308,6 +308,8 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       <FloatingActionButton />
     </div>
   );
-};
+});
+
+DashboardLayout.displayName = 'DashboardLayout';
 
 export default DashboardLayout;

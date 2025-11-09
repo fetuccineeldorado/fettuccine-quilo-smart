@@ -1,7 +1,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
@@ -10,42 +10,33 @@ interface Props {
 
 interface State {
   hasError: boolean;
-  error: Error | null;
-  errorInfo: ErrorInfo | null;
+  error?: Error;
+  errorInfo?: ErrorInfo;
 }
 
 class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = {
-      hasError: false,
-      error: null,
-      errorInfo: null,
-    };
+    this.state = { hasError: false };
   }
 
   static getDerivedStateFromError(error: Error): State {
-    return {
-      hasError: true,
-      error,
-      errorInfo: null,
-    };
+    return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('ErrorBoundary capturou um erro:', error, errorInfo);
+    console.error('ErrorBoundary caught an error:', error, errorInfo);
     this.setState({
       error,
       errorInfo,
     });
+
+    // Log error to monitoring service (if available)
+    // You can integrate with services like Sentry, LogRocket, etc.
   }
 
-  handleReset = () => {
-    this.setState({
-      hasError: false,
-      error: null,
-      errorInfo: null,
-    });
+  handleRetry = () => {
+    this.setState({ hasError: false, error: undefined, errorInfo: undefined });
   };
 
   render() {
@@ -55,25 +46,27 @@ class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div className="min-h-screen flex items-center justify-center p-4">
-          <Card className="max-w-md w-full">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-destructive">
-                <AlertTriangle className="h-5 w-5" />
+        <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+          <Card className="w-full max-w-md">
+            <CardHeader className="text-center">
+              <div className="flex justify-center mb-4">
+                <AlertTriangle className="h-12 w-12 text-destructive" />
+              </div>
+              <CardTitle className="text-xl text-destructive">
                 Ops! Algo deu errado
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Ocorreu um erro inesperado. Por favor, recarregue a página ou tente novamente.
+              <p className="text-sm text-muted-foreground text-center">
+                Ocorreu um erro inesperado. Nossa equipe foi notificada e estamos trabalhando para resolver o problema.
               </p>
-              
-              {import.meta.env.DEV && this.state.error && (
-                <details className="mt-4">
-                  <summary className="cursor-pointer text-sm font-medium mb-2">
+
+              {process.env.NODE_ENV === 'development' && this.state.error && (
+                <details className="text-xs bg-muted p-2 rounded">
+                  <summary className="cursor-pointer font-medium">
                     Detalhes do erro (desenvolvimento)
                   </summary>
-                  <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-48">
+                  <pre className="mt-2 whitespace-pre-wrap text-destructive">
                     {this.state.error.toString()}
                     {this.state.errorInfo?.componentStack}
                   </pre>
@@ -81,7 +74,12 @@ class ErrorBoundary extends Component<Props, State> {
               )}
 
               <div className="flex gap-2">
-                <Button onClick={this.handleReset} variant="outline" className="flex-1">
+                <Button
+                  onClick={this.handleRetry}
+                  className="flex-1"
+                  variant="outline"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
                   Tentar novamente
                 </Button>
                 <Button
@@ -102,4 +100,3 @@ class ErrorBoundary extends Component<Props, State> {
 }
 
 export default ErrorBoundary;
-

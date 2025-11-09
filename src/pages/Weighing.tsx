@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,13 +13,16 @@ import ExtraItemsSelector from "@/components/ExtraItemsSelector";
 import CustomerSearch from "@/components/CustomerSearch";
 import { ThermalPrinter, OrderData } from "@/utils/thermalPrinter";
 import { AlertCircle, Utensils, Printer, Users } from "lucide-react";
+import { SkeletonLoader } from "@/components/SkeletonLoader";
+import { useDebounce } from "@/hooks/useDebounce";
+import { weightSchema, priceSchema, rateLimiter } from "@/utils/validation";
 
 import { reduceProductStock, ensureProductExists } from "@/utils/inventoryUtils";
 import { getCachedSettings, clearSettingsCache } from "@/utils/settingsCache";
 import { autoFixPricePerKg, ensureSystemSettings } from "@/utils/autoFix";
 
 
-const Weighing = () => {
+const Weighing = memo(() => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [weight, setWeight] = useState<string>("");
@@ -1476,6 +1479,8 @@ ${ThermalPrinter.FEED}${ThermalPrinter.FEED}${ThermalPrinter.CUT}
       </div>
     </DashboardLayout>
   );
-};
+});
+
+Weighing.displayName = 'Weighing';
 
 export default Weighing;

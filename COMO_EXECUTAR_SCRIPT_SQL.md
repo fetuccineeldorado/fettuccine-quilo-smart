@@ -101,3 +101,6 @@ Se você já tem algum conteúdo no SQL Editor do Supabase:
 3. Cole o conteúdo correto do arquivo SQL
 
 
+
+
+
