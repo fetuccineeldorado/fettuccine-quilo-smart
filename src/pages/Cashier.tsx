@@ -7,8 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/DashboardLayout";
-import { CreditCard, DollarSign, Smartphone, Receipt, Edit } from "lucide-react";
+import { CreditCard, DollarSign, Smartphone, Receipt, Edit, CreditCard as StoneIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import StonePaymentButton from "@/components/StonePaymentButton";
 
 interface Order {
   id: string;
@@ -31,6 +32,8 @@ const Cashier = () => {
   const [amountReceived, setAmountReceived] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(true);
+  const [activePaymentTab, setActivePaymentTab] = useState<'manual' | 'stone'>('manual');
+  const [stoneTransactionId, setStoneTransactionId] = useState<string | null>(null);
   
   // Refs para acessar valores atuais sem causar re-renders
   const ordersRef = useRef(orders);
@@ -684,69 +687,174 @@ const Cashier = () => {
           <Card className="shadow-strong">
             <CardHeader>
               <CardTitle>Processar Pagamento</CardTitle>
-              <CardDescription>Selecione a forma de pagamento</CardDescription>
+              <CardDescription>Escolha o método de pagamento</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-2 gap-3">
-                {paymentMethods.map((method) => {
-                  const Icon = method.icon;
-                  return (
-                    <Button
-                      key={method.value}
-                      variant={paymentMethod === method.value ? "default" : "outline"}
-                      className="h-20 flex-col gap-2"
-                      onClick={() => setPaymentMethod(method.value)}
-                      disabled={!selectedOrder}
-                    >
-                      <Icon className="h-6 w-6" />
-                      <span className="text-sm">{method.label}</span>
-                    </Button>
-                  );
-                })}
+            <CardContent className="space-y-4">
+              {/* Tabs para selecionar tipo de pagamento */}
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant={activePaymentTab === 'manual' ? 'default' : 'outline'}
+                  onClick={() => setActivePaymentTab('manual')}
+                  className="flex items-center gap-2"
+                >
+                  <Receipt className="h-4 w-4" />
+                  Pagamento Manual
+                </Button>
+                <Button
+                  variant={activePaymentTab === 'stone' ? 'default' : 'outline'}
+                  onClick={() => setActivePaymentTab('stone')}
+                  className="flex items-center gap-2"
+                >
+                  <StoneIcon className="h-4 w-4" />
+                  Máquina Stone
+                </Button>
               </div>
 
-              {paymentMethod === "cash" && selectedOrder && (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="amount-received">Valor Recebido</Label>
-                    <Input
-                      id="amount-received"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="0.00"
-                      value={amountReceived}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        // Permitir vazio, mas validar se for número
-                        if (value === '' || (!isNaN(Number(value)) && Number(value) >= 0 && Number(value) <= 100000)) {
-                          setAmountReceived(value);
-                        }
-                      }}
-                    />
+              {/* Conteúdo baseado na aba selecionada */}
+              {activePaymentTab === 'manual' && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-3">
+                    {paymentMethods.map((method) => {
+                      const Icon = method.icon;
+                      return (
+                        <Button
+                          key={method.value}
+                          variant={paymentMethod === method.value ? "default" : "outline"}
+                          className="h-20 flex-col gap-2"
+                          onClick={() => setPaymentMethod(method.value)}
+                          disabled={!selectedOrder}
+                        >
+                          <Icon className="h-6 w-6" />
+                          <span className="text-sm">{method.label}</span>
+                        </Button>
+                      );
+                    })}
                   </div>
 
-                  {amountReceived && Number(amountReceived) >= Number(selectedOrder.total_amount) && (
-                    <div className="p-4 bg-success/10 rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <span className="text-success font-medium">Troco</span>
-                        <span className="text-2xl font-bold text-success">
-                          R$ {calculateChange().toFixed(2)}
-                        </span>
+                  {paymentMethod === "cash" && selectedOrder && (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="amount-received">Valor Recebido</Label>
+                        <Input
+                          id="amount-received"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="0.00"
+                          value={amountReceived}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            // Permitir vazio, mas validar se for número
+                            if (value === '' || (!isNaN(Number(value)) && Number(value) >= 0 && Number(value) <= 100000)) {
+                              setAmountReceived(value);
+                            }
+                          }}
+                        />
                       </div>
+
+                      {amountReceived && Number(amountReceived) >= Number(selectedOrder.total_amount) && (
+                        <div className="p-4 bg-success/10 rounded-lg">
+                          <div className="flex justify-between items-center">
+                            <span className="text-success font-medium">Troco</span>
+                            <span className="text-2xl font-bold text-success">
+                              R$ {calculateChange().toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <Button
+                    onClick={handlePayment}
+                    disabled={!selectedOrder || !paymentMethod || loading}
+                    size="lg"
+                    className="w-full"
+                  >
+                    {loading ? "Processando..." : "Confirmar Pagamento"}
+                  </Button>
+                </div>
+              )}
+
+              {activePaymentTab === 'stone' && (
+                <div className="space-y-4">
+                  {selectedOrder ? (
+                    <StonePaymentButton
+                      amount={Number(selectedOrder.total_amount)}
+                      orderId={selectedOrder.id}
+                      customerName={selectedOrder.customer_name || undefined}
+                      onPaymentSuccess={async (transactionId) => {
+                        setStoneTransactionId(transactionId);
+                        
+                        // Registrar pagamento no banco
+                        try {
+                          const { data: { session } } = await supabase.auth.getSession();
+                          if (!session?.user?.id) {
+                            throw new Error('Sessão inválida');
+                          }
+
+                          // Create payment record
+                          const { error: paymentError } = await supabase.from("payments").insert([{
+                            order_id: selectedOrder.id,
+                            payment_method: 'stone' as any,
+                            amount: Number(selectedOrder.total_amount),
+                            change_amount: 0,
+                            transaction_id: transactionId,
+                            processed_by: session.user.id,
+                          }]);
+
+                          if (paymentError) {
+                            throw paymentError;
+                          }
+
+                          // Update order status
+                          const { error: updateError } = await supabase
+                            .from("orders")
+                            .update({
+                              status: "closed",
+                              closed_at: new Date().toISOString(),
+                              closed_by: session.user.id,
+                            })
+                            .eq("id", selectedOrder.id);
+
+                          if (updateError) {
+                            throw updateError;
+                          }
+
+                          toast({
+                            title: "✅ Pagamento Stone processado!",
+                            description: `Comanda #${selectedOrder.order_number} fechada com sucesso via Stone`,
+                          });
+
+                          // Reset form
+                          setSelectedOrder(null);
+                          setPaymentMethod("");
+                          setAmountReceived("");
+                          setStoneTransactionId(null);
+                          fetchOpenOrders();
+                        } catch (error) {
+                          console.error('Erro ao processar pagamento Stone:', error);
+                          toast({
+                            title: "Erro ao registrar pagamento",
+                            description: "Pagamento aprovado mas erro ao registrar no sistema",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                      onPaymentError={(error) => {
+                        console.error('Erro no pagamento Stone:', error);
+                      }}
+                    />
+                  ) : (
+                    <div className="text-center py-8">
+                      <StoneIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                      <p className="text-muted-foreground">
+                        Selecione uma comanda para usar a máquina Stone
+                      </p>
                     </div>
                   )}
                 </div>
               )}
-
-              <Button
-                onClick={handlePayment}
-                disabled={!selectedOrder || !paymentMethod || loading}
-                size="lg"
-                className="w-full"
-              >
-                {loading ? "Processando..." : "Confirmar Pagamento"}
-              </Button>
             </CardContent>
           </Card>
         </div>
