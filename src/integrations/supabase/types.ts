@@ -1107,7 +1107,7 @@ export type Database = {
     }
     Enums: {
       order_status: "open" | "closed" | "cancelled"
-      payment_method: "cash" | "debit" | "credit" | "pix"
+      payment_method: "cash" | "debit" | "credit" | "pix" | "stone"
       user_role: "admin" | "manager" | "operator"
     }
     CompositeTypes: {
@@ -1237,7 +1237,7 @@ export const Constants = {
   public: {
     Enums: {
       order_status: ["open", "closed", "cancelled"],
-      payment_method: ["cash", "debit", "credit", "pix"],
+      payment_method: ["cash", "debit", "credit", "pix", "stone"],
       user_role: ["admin", "manager", "operator"],
     },
   },

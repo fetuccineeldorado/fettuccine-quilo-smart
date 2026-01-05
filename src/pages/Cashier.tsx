@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { Database } from "@/integrations/supabase/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -793,15 +794,15 @@ const Cashier = () => {
                             throw new Error('Sessão inválida');
                           }
 
-                          // Create payment record
-                          const { error: paymentError } = await supabase.from("payments").insert([{
-                            order_id: selectedOrder.id,
-                            payment_method: 'stone' as any,
-                            amount: Number(selectedOrder.total_amount),
-                            change_amount: 0,
-                            transaction_id: transactionId,
-                            processed_by: session.user.id,
-                          }]);
+      // Create payment record
+      const { error: paymentError } = await supabase.from("payments").insert([{
+        order_id: selectedOrder.id,
+        payment_method: 'stone' as Database["public"]["Enums"]["payment_method"],
+        amount: Number(selectedOrder.total_amount),
+        change_amount: 0,
+        transaction_id: transactionId,
+        processed_by: session.user.id,
+      }]);
 
                           if (paymentError) {
                             throw paymentError;
