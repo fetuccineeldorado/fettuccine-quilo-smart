@@ -27,7 +27,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
 
 async function applyPendingStatusMigration() {
   console.log('🔄 Aplicando migração para adicionar status "pending"...');
-  
+
   try {
     // Primeiro, verificar se "pending" já existe no enum
     console.log('🔍 Verificando se "pending" já existe no enum...');
@@ -41,7 +41,7 @@ async function applyPendingStatusMigration() {
       console.log('⚠️ Não foi possível verificar enum. Tentando adicionar "pending" diretamente...');
     } else {
       console.log('📋 Valores do enum encontrados:', enumCheck);
-      if (enumCheck && enumCheck.some((v: any) => v.enum_value === 'pending')) {
+      if (enumCheck && enumCheck.some((v) => v.enum_value === 'pending')) {
         console.log('✅ Status "pending" já existe no enum!');
         return;
       }
@@ -49,24 +49,24 @@ async function applyPendingStatusMigration() {
 
     // Tentar adicionar "pending" ao enum
     console.log('➕ Adicionando "pending" ao enum order_status...');
-    
+
     // Usar uma função que tenta adicionar e ignora se já existir
     const migrationSql = `
       DO $$
       BEGIN
         IF NOT EXISTS (
-          SELECT 1 
-          FROM pg_enum 
-          WHERE enumlabel = 'pending' 
+          SELECT 1
+          FROM pg_enum
+          WHERE enumlabel = 'pending'
           AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'order_status')
         ) THEN
           ALTER TYPE order_status ADD VALUE 'pending';
         END IF;
       END $$;
-      
+
       -- Add updated_at column to orders table if it doesn't exist
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
-      
+
       -- Create function to update updated_at timestamp
       CREATE OR REPLACE FUNCTION update_updated_at_column()
       RETURNS TRIGGER AS $$
@@ -75,14 +75,14 @@ async function applyPendingStatusMigration() {
           RETURN NEW;
       END;
       $$ language 'plpgsql';
-      
+
       -- Create trigger to automatically update updated_at
       DROP TRIGGER IF EXISTS update_orders_updated_at ON orders;
       CREATE TRIGGER update_orders_updated_at
           BEFORE UPDATE ON orders
           FOR EACH ROW
           EXECUTE FUNCTION update_updated_at_column();
-      
+
       -- Add index for better performance on status queries
       CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
       CREATE INDEX IF NOT EXISTS idx_orders_updated_at ON orders(updated_at);
@@ -90,13 +90,13 @@ async function applyPendingStatusMigration() {
 
     // Tentar executar via RPC se disponível
     const { error: rpcError } = await supabase.rpc('exec_sql', { sql: migrationSql });
-    
+
     if (rpcError) {
       console.log('⚠️ RPC não disponível. Tentando método alternativo...');
-      
+
       // Método alternativo: executar cada comando separadamente
-      const statements = migrationSql.split(';').filter(stmt => stmt.trim());
-      
+      const statements = migrationSql.split(';').filter((stmt) => stmt.trim());
+
       for (const statement of statements) {
         if (statement.trim()) {
           try {
@@ -112,7 +112,7 @@ async function applyPendingStatusMigration() {
             } else {
               console.log('✅ Comando executado com sucesso');
             }
-          } catch (err: any) {
+          } catch (err) {
             console.error('❌ Erro ao executar comando:', err.message);
           }
         }
@@ -127,7 +127,7 @@ async function applyPendingStatusMigration() {
       .from('orders')
       .select('status')
       .limit(1);
-    
+
     if (testError && testError.message.includes('pending')) {
       console.error('❌ Erro ao testar: "pending" ainda não está disponível');
       console.error('💡 Você pode precisar aplicar esta migração manualmente no Supabase Dashboard');
@@ -139,8 +139,7 @@ async function applyPendingStatusMigration() {
 
     console.log('\n✅ Migração concluída!');
     console.log('📝 Nota: Se ainda houver erros, execute o SQL manualmente no Supabase Dashboard SQL Editor');
-    
-  } catch (error: any) {
+  } catch (error) {
     console.error('❌ Erro ao aplicar migração:', error.message);
     console.error('\n💡 Você pode aplicar a migração manualmente:');
     console.error('1. Acesse o Supabase Dashboard');

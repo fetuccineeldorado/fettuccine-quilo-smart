@@ -17,6 +17,10 @@ interface PWAState {
   installPrompt: BeforeInstallPromptEvent | null;
 }
 
+interface NavigatorStandalone extends Navigator {
+  standalone?: boolean;
+}
+
 export const usePWA = () => {
   const [pwaState, setPwaState] = useState<PWAState>({
     isInstallable: false,
@@ -30,10 +34,10 @@ export const usePWA = () => {
     // Verificar se está instalado
     const checkInstalled = () => {
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-      const isInstalled = isStandalone || 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (window.navigator as any).standalone === true || // iOS Safari
-        document.referrer.includes('android-app://'); // Android
+      const navigatorWithStandalone = window.navigator as NavigatorStandalone;
+      const isIosStandalone = navigatorWithStandalone.standalone === true; // iOS Safari
+      const isAndroidStandalone = document.referrer.includes('android-app://'); // Android
+      const isInstalled = isStandalone || isIosStandalone || isAndroidStandalone;
 
       setPwaState(prev => ({
         ...prev,
@@ -100,7 +104,7 @@ export const usePWA = () => {
     if (pwaState.installPrompt) {
       pwaState.installPrompt.prompt();
       const { outcome } = await pwaState.installPrompt.userChoice;
-      
+
       setPwaState(prev => ({
         ...prev,
         isInstallable: false,
